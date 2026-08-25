@@ -1,5 +1,7 @@
 # uiuxaudit
 
+**Repo**: https://github.com/chengmatt416/uiuxaudit · **Release**: https://github.com/chengmatt416/uiuxaudit/releases/latest
+
 Zero-LLM-token tool that transfers any web page (URL or local/GitHub source)
 into a complete Figma design file, then audits it with deterministic,
 rule-based UI/UX checks you can selectively accept and auto-apply.
