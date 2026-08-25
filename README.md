@@ -79,7 +79,18 @@ npm run ua -- audit-deps                 # exits non-zero if any AI SDK appears
 
 Recorded in `sites.json`: example.com, news.ycombinator.com,
 playwright.dev/docs/intro, tailwindcss.com, github.com/microsoft/TypeScript.
-Offline proofs live in `scripts/` (`capture-smoke.ts`, `verify-mock.ts`).
+
+### Verification scripts (`scripts/`)
+
+| Script | Proves |
+| --- | --- |
+| `capture-smoke.ts` | capture engine end-to-end on a live URL |
+| `verify-mock.ts` | REST comparer: perfect copy passes, position/color/missing perturbations detected |
+| `ops-loop-mock.ts` | suggest → ops → apply → re-verify loop against the APPLIED baseline |
+| `plugin-sim.ts` | the real `code.js` import/apply logic against a mock Plugin API |
+| `cli-verify-mock.ts` | full CLI `verify` chain (state → baseline → report → exit code) via `UA_FIGMA_API` |
+| `ui-smoke.ts` / `pwa-smoke.ts` / `ext-smoke.ts` | web UI rendering, service worker, extension capture |
+| `finalize.sh` | one-shot finisher after the manual Figma import |
 
 ## Applications
 
