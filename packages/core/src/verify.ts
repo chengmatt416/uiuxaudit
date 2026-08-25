@@ -55,7 +55,9 @@ export interface VerifyOptions {
 }
 
 async function figmaGet<T>(path: string, token: string): Promise<T> {
-  const res = await fetch(`https://api.figma.com/v1/${path}`, {
+  // UA_FIGMA_API exists for offline CLI tests; production default is official.
+  const base = process.env.UA_FIGMA_API ?? "https://api.figma.com/v1";
+  const res = await fetch(`${base}/${path}`, {
     headers: { "X-Figma-Token": token },
     signal: AbortSignal.timeout(60_000),
   });
