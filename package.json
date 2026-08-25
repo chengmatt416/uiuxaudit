@@ -1,0 +1,22 @@
+{
+  "name": "uiuxaudit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/cli --noEmit",
+    "audit-deps": "tsx packages/cli/src/cli.ts audit-deps",
+    "ua": "tsx packages/cli/src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

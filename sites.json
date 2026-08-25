@@ -1,0 +1,7 @@
+[
+  { "slug": "example", "url": "https://example.com" },
+  { "slug": "hn", "url": "https://news.ycombinator.com" },
+  { "slug": "playwright-docs", "url": "https://playwright.dev/docs/intro" },
+  { "slug": "tailwind", "url": "https://tailwindcss.com" },
+  { "slug": "github-ts", "url": "https://github.com/microsoft/TypeScript" }
+]
