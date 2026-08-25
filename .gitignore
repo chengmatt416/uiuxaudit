@@ -1,3 +1,9 @@
 node_modules/
 .uiuxaudit/
 *.log
+apps/web/dist/
+apps/extension/dist/
+apps/desktop/release/
+apps/desktop/.cache/
+apps/desktop/web/
+apps/desktop/core-node.cjs

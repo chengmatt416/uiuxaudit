@@ -1,0 +1,12 @@
+{
+  "name": "uiuxaudit",
+  "productName": "uiuxaudit",
+  "version": "0.1.0",
+  "description": "Zero-token web→Figma transfer and rule-based UI/UX audit",
+  "main": "main.js",
+  "private": true,
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "ws": "^8.18.0"
+  }
+}

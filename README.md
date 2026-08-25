@@ -79,6 +79,25 @@ Recorded in `sites.json`: example.com, news.ycombinator.com,
 playwright.dev/docs/intro, tailwindcss.com, github.com/microsoft/TypeScript.
 Offline proofs live in `scripts/` (`capture-smoke.ts`, `verify-mock.ts`).
 
+## Applications
+
+One shared web UI (`apps/web`), packaged for every target:
+
+| Target | Build | Artifact |
+| --- | --- | --- |
+| Web / PWA | `npm run build:web` | `apps/web/dist` — installable PWA (manifest + offline service worker); serve over http(s) |
+| Chrome extension | `npm run build:ext` | `apps/extension/dist/chrome` (+`.zip`) — load unpacked via `chrome://extensions` |
+| Firefox extension | `npm run build:ext` | `apps/extension/dist/firefox` (+`.zip`) — load via `about:debugging#/runtime/this-firefox` |
+| macOS app (adhoc-signed) | `npm run build:desktop && npm run package:desktop -- darwin:arm64 darwin:x64` | `apps/desktop/release/uiuxaudit-<p>-<a>.zip` — every Mach-O ad-hoc signed with `rcodesign` (no Apple cert needed; Gatekeeper requires right-click→Open or `xattr -cr`) |
+| Windows app | `npm run package:desktop -- win32:x64` | `uiuxaudit-win32-x64.zip` (portable `uiuxaudit.exe`) |
+| Linux app | `npm run package:desktop -- linux:x64 linux:arm64` | `uiuxaudit-linux-*.tar.gz` |
+| Android APK | push a `v*` tag or run manually → `android-apk` GitHub Action | `uiuxaudit-debug-apk` artifact (Capacitor shell; on-device SDK builds are not possible in the dev environment, CI is the supported path) |
+
+Desktop shells expose the full pipeline in-app (Convert URL → audit → apply
+→ Figma verify) over IPC; the PWA/extensions cover audit + apply + verify,
+and the extensions additionally capture the current tab directly
+(`activeTab` + scripting, no telemetry).
+
 ## Known limitations (v1)
 
 - Flat layer structure (no CSS nesting reconstruction); visual fidelity unaffected.

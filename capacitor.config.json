@@ -1,0 +1,11 @@
+{
+  "appId": "app.uiuxaudit",
+  "appName": "uiuxaudit",
+  "webDir": "apps/web/dist",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

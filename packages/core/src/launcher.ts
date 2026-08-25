@@ -37,7 +37,9 @@ export function resolveChromiumBinary(): string {
   );
 }
 
-export async function launchHeadless(): Promise<LaunchedBrowser> {
+export async function launchHeadless(
+  opts: { extraArgs?: string[] } = {},
+): Promise<LaunchedBrowser> {
   const bin = resolveChromiumBinary();
   const userDataDir = mkdtempSync(join(tmpdir(), "ua-chrome-"));
   const args = [
@@ -51,6 +53,7 @@ export async function launchHeadless(): Promise<LaunchedBrowser> {
     "--force-device-scale-factor=1",
     "--no-sandbox",
     `--user-data-dir=${userDataDir}`,
+    ...(opts.extraArgs ?? []),
     "about:blank",
   ];
   const proc = spawn(bin, args, { stdio: "ignore" });

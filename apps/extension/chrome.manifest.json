@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "uiuxaudit",
+  "version": "0.1.0",
+  "description": "Capture any tab into a zero-token Figma-ready baseline and audit it with rule-based UI/UX checks.",
+  "icons": {
+    "192": "icon-192.png"
+  },
+  "action": {
+    "default_title": "uiuxaudit — open audit workbench"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["scripting", "activeTab", "downloads", "storage"],
+  "host_permissions": ["<all_urls>"]
+}

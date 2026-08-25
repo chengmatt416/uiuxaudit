@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>uiuxaudit</title>
+    <meta name="theme-color" content="#0e1116" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon-192.png" />
+  </head>
+  <body>
+    <header>
+      <h1>uiuxaudit</h1>
+      <span class="meta" id="meta"></span>
+      <button id="captureTabBtn" class="btn primary" hidden>Capture current tab</button>
+      <input id="convUrl" class="urlbox" placeholder="https://example.com — Convert URL" hidden />
+      <button id="convBtn" class="btn primary" hidden>Convert</button>
+      <span class="spacer"></span>
+      <label class="btn">
+        Load capture
+        <input id="file" type="file" accept=".json,application/json" hidden />
+      </label>
+      <button id="verifyBtn" class="btn ghost" hidden>Verify in Figma…</button>
+    </header>
+
+    <main>
+      <section id="stage">
+        <div id="canvasWrap"><div id="canvas"></div></div>
+        <div id="dropHint">
+          <div>Drop a <b>*.capture.json</b> here or use “Load capture”.</div>
+          <small>Zero-token pipeline: capture → Figma import → verify → suggest → apply.</small>
+        </div>
+      </section>
+
+      <aside id="side">
+        <div class="bar">
+          <strong>Suggestions</strong>
+          <span id="selCount"></span>
+          <span class="spacer"></span>
+          <button id="selAll" class="linkish">all</button>
+          <button id="selNone" class="linkish">none</button>
+        </div>
+        <ol id="suggList"></ol>
+        <div class="actions">
+          <button id="applyBtn" class="btn primary" disabled>Apply selected</button>
+          <a id="dlOps" class="btn" download="ops.json" hidden>ops.json</a>
+          <a id="dlApplied" class="btn" download="applied.capture.json" hidden>applied.capture.json</a>
+        </div>
+
+        <div id="verifyPanel" hidden>
+          <h3>Figma verify</h3>
+          <p class="hint">
+            Compares the loaded (or applied) baseline against the live file via
+            api.figma.com — coverage ≥95%, ≤2px, colors ±3/255.
+          </p>
+          <input id="tok" placeholder="FIGMA_TOKEN (figd_…)" type="password" autocomplete="off" />
+          <input id="fkey" placeholder="file key from the Figma file URL" autocomplete="off" />
+          <label class="chk"
+            ><input id="useApplied" type="checkbox" checked disabled /> compare against applied
+            baseline</label
+          >
+          <button id="runVerify" class="btn primary">Run verify</button>
+          <pre id="verifyOut" class="mono"></pre>
+        </div>
+      </aside>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

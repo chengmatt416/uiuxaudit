@@ -10,7 +10,14 @@ import {
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import type { AddressInfo } from "node:net";
 import { createInterface } from "node:readline/promises";
-import { applyFixesToDoc, captureUrl, indexNodes, suggestFor, verifyCapture } from "@ua/core";
+import {
+  applyFixesToDoc,
+  captureUrl,
+  fixesToFigmaOps,
+  indexNodes,
+  suggestFor,
+  verifyCapture,
+} from "@ua/core";
 import type {
   CaptureDoc,
   Fix,
@@ -365,29 +372,6 @@ async function pickInteractive(suggestions: Suggestion[]): Promise<Suggestion[]>
   }
 }
 
-function fixesToFigmaOps(fixes: Fix[]): FigmaOp[] {
-  const ops: FigmaOp[] = [];
-  for (const f of fixes) {
-    switch (f.kind) {
-      case "setTextColor":
-        ops.push({ id: f.nodeId, op: "setFill", value: f.value });
-        break;
-      case "setBackgroundColor":
-        ops.push({ id: f.nodeId, op: "setBackground", value: f.value });
-        break;
-      case "setFontSize":
-        ops.push({ id: f.nodeId, op: "setFontSize", value: f.value });
-        break;
-      case "setSize":
-        ops.push({ id: f.nodeId, op: "setSize", w: f.w, h: f.h });
-        break;
-      case "setSnapY":
-        ops.push({ id: f.nodeId, op: "setSnapY", value: f.value });
-        break;
-    }
-  }
-  return ops;
-}
 
 function cssColor(c: RGBA): string {
   const hex = (v: number) => Math.round(v * 255).toString(16).padStart(2, "0");

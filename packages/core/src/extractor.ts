@@ -490,3 +490,5 @@ function __ua_extract(withProvenance: boolean) {
     imageUrls,
   };
 }
+
+export default __ua_extract;

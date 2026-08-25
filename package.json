@@ -9,9 +9,22 @@
   "scripts": {
     "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/cli --noEmit",
     "audit-deps": "tsx packages/cli/src/cli.ts audit-deps",
-    "ua": "tsx packages/cli/src/cli.ts"
+    "ua": "tsx packages/cli/src/cli.ts",
+    "build:web": "bash scripts/build-web.sh",
+    "build:ext": "bash scripts/build-extensions.sh",
+    "build:desktop": "bash scripts/build-desktop.sh",
+    "package:desktop": "node scripts/package-desktop.mjs",
+    "smoke:ui": "tsx scripts/ui-smoke.ts",
+    "smoke:pwa": "tsx scripts/pwa-smoke.ts",
+    "smoke:ext": "tsx scripts/ext-smoke.ts",
+    "smoke:verify": "tsx scripts/verify-mock.ts",
+    "smoke:loop": "tsx scripts/ops-loop-mock.ts"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@electron/packager": "^20.3.0",
     "@types/node": "^22.9.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
