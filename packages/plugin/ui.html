@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        font: 12px/1.5 ui-sans-serif, system-ui, sans-serif;
+        margin: 0;
+        padding: 12px;
+        color: #1e1e1e;
+      }
+      h3 { margin: 0 0 10px; }
+      .btn {
+        display: inline-block;
+        padding: 7px 12px;
+        background: #18a0fb;
+        color: #fff;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        border: none;
+      }
+      .btn.ghost { background: #eeeef0; color: #1e1e1e; }
+      .st { margin: 8px 0; min-height: 16px; color: #444; }
+      .ok { color: #0c8a52; }
+      .bad { color: #d6443c; }
+      hr { border: none; border-top: 1px solid #e5e5e5; margin: 14px 0; }
+      #log { max-height: 180px; overflow: auto; font-size: 11px; white-space: pre-wrap; color: #555; }
+      input[type="file"] { display: none; }
+      .hint { color: #888; margin: 6px 0 0; font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <h3>uiuxaudit</h3>
+
+    <label class="btn">
+      Import capture(s)
+      <input id="file" type="file" accept=".json,application/json" multiple />
+    </label>
+    <p class="hint">
+      Select one or more *.capture.json files — each becomes a
+      <b>page:&lt;slug&gt;</b> frame on the current page.
+    </p>
+    <div id="importStatus" class="st"></div>
+
+    <hr />
+
+    <label class="btn ghost">
+      Apply ops
+      <input id="ops" type="file" accept=".json,application/json" />
+    </label>
+    <p class="hint">Select a <b>*.ops.json</b> produced by <code>apply</code>.</p>
+    <div id="applyStatus" class="st"></div>
+
+    <div id="log"></div>
+
+    <script>
+      const logEl = document.getElementById("log");
+      function log(line, cls) {
+        const d = document.createElement("div");
+        if (cls) d.className = cls;
+        d.textContent = line;
+        logEl.appendChild(d);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      function setStatus(id, text, cls) {
+        const el = document.getElementById(id);
+        el.textContent = text;
+        el.className = "st" + (cls ? " " + cls : "");
+      }
+
+      document.getElementById("file").addEventListener("change", async (e) => {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        for (const f of files) {
+          setStatus("importStatus", "importing " + f.name + "…");
+          try {
+            const payload = JSON.parse(await f.text());
+            parent.postMessage({ pluginMessage: { type: "import", payload } }, "*");
+            // code.js replies per import via postMessage; log lands below.
+          } catch (err) {
+            setStatus("importStatus", "bad JSON: " + err, "bad");
+          }
+          await new Promise((r) => setTimeout(r, 150));
+        }
+        e.target.value = "";
+      });
+
+      document.getElementById("ops").addEventListener("change", async (e) => {
+        const f = (e.target.files || [])[0];
+        if (!f) return;
+        setStatus("applyStatus", "applying " + f.name + "…");
+        try {
+          const payload = JSON.parse(await f.text());
+          parent.postMessage({ pluginMessage: { type: "apply", payload } }, "*");
+        } catch (err) {
+          setStatus("applyStatus", "bad JSON: " + err, "bad");
+        }
+        e.target.value = "";
+      });
+
+      window.onmessage = (event) => {
+        const msg = event.data && event.data.pluginMessage;
+        if (!msg) return;
+        if (msg.type === "done") {
+          setStatus(
+            "importStatus",
+            `imported: ${msg.created} nodes created, ${msg.failed} failed`,
+            msg.failed ? "bad" : "ok",
+          );
+          log("import done — created " + msg.created + ", failed " + msg.failed);
+          if (msg.detail) log(msg.detail, "bad");
+        } else if (msg.type === "applied") {
+          setStatus(
+            "applyStatus",
+            `applied ${msg.applied} ops, skipped ${msg.skipped}`,
+            msg.skipped ? "bad" : "ok",
+          );
+          log("apply done — applied " + msg.applied + ", skipped " + msg.skipped);
+          if (msg.detail) log(msg.detail, "bad");
+        } else if (msg.type === "error") {
+          setStatus("applyStatus", msg.message, "bad");
+          log("error: " + msg.message, "bad");
+        }
+      };
+    </script>
+  </body>
+</html>
