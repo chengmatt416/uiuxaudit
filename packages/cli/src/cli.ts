@@ -10,7 +10,7 @@ import {
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import type { AddressInfo } from "node:net";
 import { createInterface } from "node:readline/promises";
-import { captureUrl, indexNodes, suggestFor, verifyCapture } from "@ua/core";
+import { applyFixesToDoc, captureUrl, indexNodes, suggestFor, verifyCapture } from "@ua/core";
 import type {
   CaptureDoc,
   Fix,
@@ -58,6 +58,7 @@ const STATE_PATH = join(UA_DIR, "state.json");
 interface StateRec {
   fileKey?: string;
   capturePath?: string;
+  appliedPath?: string;
 }
 type State = Record<string, StateRec>;
 
@@ -269,10 +270,23 @@ async function cmdVerify(p: Parsed): Promise<number> {
       continue;
     }
     try {
+      const useApplied = p.flags.original !== true;
+      const basePath =
+        useApplied && rec.appliedPath && existsSync(rec.appliedPath)
+          ? rec.appliedPath
+          : rec.capturePath!;
+      if (!basePath || !existsSync(basePath)) {
+        console.error(`${slug}: capture missing`);
+        allOk = false;
+        continue;
+      }
+      console.error(
+        `[${slug}] baseline: ${useApplied && rec.appliedPath && basePath === rec.appliedPath ? "applied" : "original"}`,
+      );
       const report = await verifyCapture({
         token,
         fileKey: rec.fileKey,
-        capture: loadCapture(slug),
+        capture: JSON.parse(readFileSync(basePath, "utf8")) as CaptureDoc,
       });
       printReport(report);
       if (!report.passed) allOk = false;
@@ -534,8 +548,16 @@ async function cmdApply(p: Parsed): Promise<number> {
   mkdirSync(OUT_DIR, { recursive: true });
   const outPath = join(OUT_DIR, `${slug}.ops.json`);
   writeFileSync(outPath, JSON.stringify({ slug, ops }, null, 2));
+  const patched = applyFixesToDoc(doc, fixes);
+  const appliedPath = join(OUT_DIR, `${slug}.applied.capture.json`);
+  writeFileSync(appliedPath, JSON.stringify(patched));
+  const st = loadState();
+  st[slug] = { ...st[slug], appliedPath };
+  saveState(st);
   console.log(
-    `${ops.length} figma ops → ${outPath}\nPlugin → Apply mode → select this file (page must contain frame "page:${slug}")`,
+    `${ops.length} figma ops → ${outPath}\napplied baseline → ${appliedPath}\n` +
+      `Plugin → Apply mode → select this ops file (page must contain frame "page:${slug}")\n` +
+      `After running Apply: FIGMA_TOKEN=… npm run ua -- verify ${slug}   # compares against the APPLIED baseline`,
   );
   return 0;
 }

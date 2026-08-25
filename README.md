@@ -55,7 +55,9 @@ FIGMA_TOKEN=… npm run ua -- verify                                 # all regis
 # 5. Audit + selective apply
 npm run ua -- suggest example            # numbered deterministic findings
 npm run ua -- apply example --ids 1,3-5  # or --all, or interactive picker
-#   URL mode      → writes .uiuxaudit/out/<slug>.ops.json; run plugin in Apply mode
+#   URL mode      → writes <slug>.ops.json (plugin Apply mode) AND
+#                   <slug>.applied.capture.json; later `verify` runs compare
+#                   against the APPLIED baseline (--original forces pristine)
 #   project mode  → rewrites the source CSS in place (color/font-size/min-* rules)
 
 # Guardrail
