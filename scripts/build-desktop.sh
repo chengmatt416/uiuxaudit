@@ -5,7 +5,6 @@ cd "$(dirname "$0")/.."
 
 npx esbuild packages/core/src/index.ts \
   --bundle --platform=node --format=cjs \
-  --external:esbuild --external:ws \
   --outfile=apps/desktop/core-node.cjs
 
 bash scripts/build-web.sh
