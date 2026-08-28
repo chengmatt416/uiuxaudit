@@ -44,10 +44,20 @@ async function download(url, dest) {
     console.log("cached:", dest);
     return;
   }
-  console.log("GET", url);
-  const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(600_000) });
-  if (!res.ok || !res.body) throw new Error(`${res.status} for ${url}`);
-  await pipeline(res.body, createWriteStream(dest));
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      console.log(`GET (attempt ${attempt})`, url);
+      const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(600_000) });
+      if (!res.ok || !res.body) throw new Error(`${res.status} for ${url}`);
+      await pipeline(res.body, createWriteStream(dest));
+      return;
+    } catch (err) {
+      rmSync(dest, { force: true });
+      if (attempt === 4) throw err;
+      console.warn(`Download attempt ${attempt} failed: ${err}. Retrying in 2s...`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
 }
 
 async function githubJson(url) {

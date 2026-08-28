@@ -118,7 +118,7 @@ run([
   `https://www.figma.com/design/${KEY}/x`,
 ]);
 
-const out = run(["packages/cli/src/cli.ts", "verify", doc.slug]);
+const out = run(["packages/cli/src/cli.ts", "verify", doc.slug, "--original"]);
 console.log(out.trim());
 serverProc.kill();
 if (!out.includes("→ PASS") || !out.includes("100.00%")) {

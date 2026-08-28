@@ -25,11 +25,14 @@ function slugify(text) {
 }
 
 async function resolveTabId(msg) {
-  if (typeof msg.tabId === "number") return msg.tabId;
+  if (msg && typeof msg.tabId === "number") return msg.tabId;
   const stored = await chrome.storage.session.get("lastTabId");
-  if (typeof stored.lastTabId === "number") return stored.lastTabId;
-  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return active ? active.id : undefined;
+  if (stored && typeof stored.lastTabId === "number") return stored.lastTabId;
+  const tabs = await chrome.tabs.query({});
+  const candidate = tabs.find(
+    (t) => t.url && !t.url.startsWith("chrome-extension://") && !t.url.startsWith("chrome://"),
+  ) || tabs.find((t) => t.id !== undefined && !t.url?.startsWith("chrome-extension://"));
+  return candidate ? candidate.id : undefined;
 }
 
 async function captureTab(tabId) {
@@ -82,6 +85,8 @@ async function captureTab(tabId) {
     capturedAt: new Date().toISOString(),
   };
 }
+self.captureTab = captureTab;
+self.resolveTabId = resolveTabId;
 
 chrome.action.onClicked.addListener((tab) => {
   if (tab && typeof tab.id === "number") {

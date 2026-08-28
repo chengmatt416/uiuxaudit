@@ -21,6 +21,6 @@
   "background": {
     "scripts": ["background.js"]
   },
-  "permissions": ["scripting", "activeTab", "downloads", "storage"],
+  "permissions": ["scripting", "activeTab", "downloads", "storage", "tabs"],
   "host_permissions": ["<all_urls>"]
 }

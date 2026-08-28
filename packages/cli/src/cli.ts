@@ -278,17 +278,21 @@ async function cmdVerify(p: Parsed): Promise<number> {
     }
     try {
       const useApplied = p.flags.original !== true;
+      const defaultCap = join(OUT_DIR, `${slug}.capture.json`);
+      const defaultApp = join(OUT_DIR, `${slug}.applied.capture.json`);
+      const appliedPath = rec.appliedPath || (existsSync(defaultApp) ? defaultApp : undefined);
+      const capturePath = rec.capturePath || (existsSync(defaultCap) ? defaultCap : undefined);
       const basePath =
-        useApplied && rec.appliedPath && existsSync(rec.appliedPath)
-          ? rec.appliedPath
-          : rec.capturePath!;
+        useApplied && appliedPath && existsSync(appliedPath)
+          ? appliedPath
+          : capturePath;
       if (!basePath || !existsSync(basePath)) {
         console.error(`${slug}: capture missing`);
         allOk = false;
         continue;
       }
       console.error(
-        `[${slug}] baseline: ${useApplied && rec.appliedPath && basePath === rec.appliedPath ? "applied" : "original"}`,
+        `[${slug}] baseline: ${useApplied && appliedPath && basePath === appliedPath ? "applied" : "original"}`,
       );
       const report = await verifyCapture({
         token,

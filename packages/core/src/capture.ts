@@ -116,7 +116,11 @@ export async function captureUrl(
     );
     await sleep(400);
 
-    const expression = `(${__ua_extract.toString()})(${Boolean(opts.projectDir)})`;
+    const expression =
+      "(function(){\n" +
+      "var __name = typeof __name !== 'undefined' ? __name : function(f, n) { return f; };\n" +
+      "return (" + __ua_extract.toString() + ")(" + Boolean(opts.projectDir) + ");\n" +
+      "})()";
     const raw = await evalExpr<RawExtract>(cdp, expression);
 
     // Fetch image bytes up front so the plugin never needs network access.

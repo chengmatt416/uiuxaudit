@@ -48,7 +48,7 @@ ipcMain.handle("ua:verify", async (_ev, opts) => {
 
 ipcMain.handle("ua:chromiumPath", async () => {
   try {
-    return { ok: true, path: launcher.resolveChromiumBinary() };
+    return { ok: true, path: core.resolveChromiumBinary() };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
