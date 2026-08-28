@@ -1,14 +1,10 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { transformSync } from "esbuild";
 import type {
   CaptureDoc,
   CaptureNode,
 } from "./types.js";
 import { Cdp } from "./cdp.js";
 import { launchHeadless } from "./launcher.js";
-
+import __ua_extract from "./extractor.js";
 export interface CaptureOptions {
   viewportWidth?: number;
   viewportHeight?: number;
@@ -34,20 +30,6 @@ function sleep(ms: number): Promise<void> {
   return promise;
 }
 
-let cachedExtractorJs: string | null = null;
-
-function extractorJs(): string {
-  if (cachedExtractorJs) return cachedExtractorJs;
-  const here = dirname(fileURLToPath(import.meta.url));
-  const src = readFileSync(join(here, "extractor.ts"), "utf8");
-  cachedExtractorJs = transformSync(src, {
-    loader: "ts",
-    format: "esm",
-    target: "chrome120",
-    minify: false,
-  }).code;
-  return cachedExtractorJs;
-}
 
 async function evalExpr<T>(cdp: Cdp, expression: string): Promise<T> {
   const r = await cdp.send<{
@@ -134,10 +116,7 @@ export async function captureUrl(
     );
     await sleep(400);
 
-    const expression =
-      "(function(){\n" + extractorJs() + "\nreturn __ua_extract(" +
-      Boolean(opts.projectDir) +
-      ");\n})()";
+    const expression = `(${__ua_extract.toString()})(${Boolean(opts.projectDir)})`;
     const raw = await evalExpr<RawExtract>(cdp, expression);
 
     // Fetch image bytes up front so the plugin never needs network access.

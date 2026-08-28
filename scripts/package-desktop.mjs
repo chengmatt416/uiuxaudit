@@ -59,15 +59,17 @@ async function githubJson(url) {
 }
 
 async function ensureRcodesign() {
+  if (process.platform === "darwin") return undefined;
   const bin = join(CACHE, "rcodesign");
   if (existsSync(bin)) return bin;
   const release = await githubJson(
     "https://api.github.com/repos/indygreg/apple-platform-rs/releases/latest",
   );
-  const asset = (release.assets ?? []).find(
-    (a) => /apple-codesign-.*aarch64-unknown-linux-(musl|gnu)\.tar\.gz$/.test(a.name),
-  );
-  if (!asset) throw new Error("no aarch64 linux apple-codesign asset in latest release");
+  const hostArch = process.arch === "arm64" ? "aarch64" : "x86_64";
+  const hostPlatform = process.platform === "linux" ? "unknown-linux-(musl|gnu)" : "apple-darwin";
+  const regex = new RegExp(`apple-codesign-.*${hostArch}-${hostPlatform}\\.tar\\.gz$`);
+  const asset = (release.assets ?? []).find((a) => regex.test(a.name));
+  if (!asset) throw new Error(`no apple-codesign asset found for ${hostArch}-${hostPlatform}`);
   const tgz = join(CACHE, asset.name);
   await download(asset.browser_download_url, tgz);
   sh("tar", ["-xzf", tgz, "-C", CACHE]);
@@ -129,6 +131,10 @@ function renameEntry(extractDir, platform) {
       .replace(
         /(<key>CFBundleDisplayName<\/key>\s*<string>)Electron(<\/string>)/,
         "$1uiuxaudit$2",
+      )
+      .replace(
+        /(<key>CFBundleIdentifier<\/key>\s*<string>)com\.github\.Electron(<\/string>)/,
+        "$1com.uiuxaudit.app$2",
       );
     writeFileSync(plist, patched);
     return dst;
@@ -167,11 +173,15 @@ for (const [platform, arch] of TARGETS) {
   renameEntry(extractDir, platform);
   if (platform === "darwin") {
     const app = join(extractDir, "uiuxaudit.app");
-    // Bundle/deep sign first, then re-sign every Mach-O individually — the
-    // final file pass must be last or bundle rewriting strips file signatures.
-    sh(rcodesign, ["sign", app]);
-    sh("find", [app, "-type", "f", "-perm", "-111", "-exec", rcodesign, "sign", "{}", ";"]);
-    console.log("adhoc signed:", app);
+    if (process.platform === "darwin") {
+      sh("codesign", ["--force", "--deep", "-s", "-", app]);
+      sh("codesign", ["--verify", "--deep", "--strict", "--verbose=2", app]);
+      console.log("native adhoc signed & verified:", app);
+    } else {
+      sh(rcodesign, ["sign", app]);
+      sh("find", [app, "-type", "f", "-perm", "-111", "-exec", rcodesign, "sign", "{}", ";"]);
+      console.log("adhoc signed:", app);
+    }
   }
   const base = extractDir.split("/").pop();
   if (platform === "darwin" || platform === "win32") {

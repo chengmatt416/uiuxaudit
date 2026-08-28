@@ -24,13 +24,20 @@ export function resolveChromiumBinary(): string {
     "/usr/bin/chromium",
     "/usr/bin/google-chrome",
     "/usr/bin/google-chrome-stable",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
   ];
   for (const c of candidates) if (existsSync(c)) return c;
-  try {
-    const whiched = execFileSync("which", ["chromium-browser"], { encoding: "utf8" }).trim();
-    if (whiched) return whiched;
-  } catch {
-    /* fall through */
+  for (const bin of ["chromium-browser", "chromium", "google-chrome", "google-chrome-stable"]) {
+    try {
+      const whiched = execFileSync("which", [bin], { encoding: "utf8" }).trim();
+      if (whiched && existsSync(whiched)) return whiched;
+    } catch {
+      /* fall through */
+    }
   }
   throw new Error(
     "No chromium binary found. Install it (pkg install chromium) or set UA_CHROMIUM.",
@@ -74,7 +81,11 @@ export async function launchHeadless(
               } catch {
                 /* already dead */
               }
-              rmSync(userDataDir, { recursive: true, force: true });
+              try {
+                rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+              } catch {
+                /* ignore cleanup failure */
+              }
             },
           };
         }
@@ -89,6 +100,10 @@ export async function launchHeadless(
   } catch {
     /* already dead */
   }
-  rmSync(userDataDir, { recursive: true, force: true });
+  try {
+    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  } catch {
+    /* ignore cleanup failure */
+  }
   throw new Error("Chromium failed to start or expose DevToolsActivePort in time.");
 }
