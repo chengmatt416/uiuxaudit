@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import { launchHeadless } from "../packages/core/src/launcher.js";
 import { Cdp } from "../packages/core/src/cdp.js";
@@ -10,6 +11,10 @@ import { Cdp } from "../packages/core/src/cdp.js";
  */
 const root = resolve(".");
 const url = "file://" + root + "/apps/web/dist/index.html";
+
+if (!existsSync(".uiuxaudit/out/example.capture.json")) {
+  execSync("npx tsx packages/cli/src/cli.ts convert https://example.com --name example", { stdio: "inherit" });
+}
 const capture = readFileSync(".uiuxaudit/out/example.capture.json", "utf8");
 
 const browser = await launchHeadless();

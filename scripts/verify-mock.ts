@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { verifyCapture } from "../packages/core/src/index.js";
 import type { CaptureDoc } from "../packages/core/src/index.js";
 
@@ -63,6 +64,10 @@ function mirror(doc: CaptureDoc): RestNode {
     };
   });
   return root;
+}
+
+if (!existsSync(".uiuxaudit/out/example.capture.json")) {
+  execSync("npx tsx packages/cli/src/cli.ts convert https://example.com --name example", { stdio: "inherit" });
 }
 
 const doc = JSON.parse(

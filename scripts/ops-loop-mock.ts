@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import {
   applyFixesToDoc,
   verifyCapture,
@@ -98,6 +99,13 @@ function applyOpsToMirror(mirrorRoot: RestNode, ops: FigmaOp[]): void {
         break;
     }
   }
+}
+
+if (!existsSync(".uiuxaudit/out/example.capture.json")) {
+  execSync("npx tsx packages/cli/src/cli.ts convert https://example.com --name example", { stdio: "inherit" });
+}
+if (!existsSync(".uiuxaudit/out/example.suggestions.json")) {
+  execSync("npx tsx packages/cli/src/cli.ts suggest example", { stdio: "inherit" });
 }
 
 const doc = JSON.parse(

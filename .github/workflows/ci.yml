@@ -36,6 +36,11 @@ jobs:
           npm run build:ext
           npm run build:desktop
 
+      - name: Generate Baseline Fixtures
+        run: |
+          npm run ua -- convert https://example.com --name example
+          npm run ua -- suggest example
+
       - name: Run Core Test Suite
         run: |
           npm run smoke:verify
