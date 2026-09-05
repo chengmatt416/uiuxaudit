@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ua/core": "workspace:*"
+    "@ua/core": "*"
   },
   "license": "MIT",
   "repository": {
