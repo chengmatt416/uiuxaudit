@@ -237,12 +237,47 @@ async function runApply(payload) {
   });
 }
 
-figma.showUI(__html__, { width: 420, height: 480 });
+async function runCreateStyles(payload) {
+  if (typeof figma.createPaintStyle !== "function") {
+    figma.ui.postMessage({ type: "error", message: "createPaintStyle not supported in this environment" });
+    return;
+  }
+  const slug = payload.slug || "tokens";
+  const nodes = payload.nodes || [];
+  const colorMap = new Map();
+  for (const n of nodes) {
+    if (n.bgColor && n.bgColor.a > 0.05) {
+      const k = Math.round(n.bgColor.r * 255) + "," + Math.round(n.bgColor.g * 255) + "," + Math.round(n.bgColor.b * 255);
+      colorMap.set(k, n.bgColor);
+    }
+    if (n.textColor && n.textColor.a > 0.05) {
+      const k = Math.round(n.textColor.r * 255) + "," + Math.round(n.textColor.g * 255) + "," + Math.round(n.textColor.b * 255);
+      colorMap.set(k, n.textColor);
+    }
+  }
+  let count = 0;
+  let idx = 1;
+  for (const c of colorMap.values()) {
+    try {
+      const style = figma.createPaintStyle();
+      style.name = slug + "/color-" + (idx++);
+      style.paints = solidFill(c);
+      count++;
+    } catch (e) {
+      /* skip unsupported style creation */
+    }
+  }
+  figma.ui.postMessage({ type: "stylesCreated", count: count });
+}
+
+figma.showUI(__html__, { width: 440, height: 520 });
 figma.ui.onmessage = async function (msg) {
   try {
     if (msg.type === "import") await runImport(msg.payload);
     else if (msg.type === "apply") await runApply(msg.payload);
+    else if (msg.type === "createStyles") await runCreateStyles(msg.payload);
   } catch (err) {
     figma.ui.postMessage({ type: "error", message: String(err) });
   }
 };
+

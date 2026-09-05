@@ -1,6 +1,29 @@
 {
   "name": "uiuxaudit",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "Zero-LLM-token web/code → Figma transfer with deterministic UI/UX audit, design tokens, and minimalist GUI workspace",
+  "license": "MIT",
+  "author": "chengmatt416 <chengmatt416@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chengmatt416/uiuxaudit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/chengmatt416/uiuxaudit/issues"
+  },
+  "homepage": "https://github.com/chengmatt416/uiuxaudit#readme",
+  "keywords": [
+    "figma",
+    "uiux",
+    "audit",
+    "design-tokens",
+    "accessibility",
+    "wcag",
+    "minimalist",
+    "gui",
+    "zero-token",
+    "devtools"
+  ],
   "private": true,
   "type": "module",
   "workspaces": [
@@ -10,6 +33,7 @@
     "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/cli --noEmit",
     "audit-deps": "tsx packages/cli/src/cli.ts audit-deps",
     "ua": "tsx packages/cli/src/cli.ts",
+    "gui": "tsx packages/cli/src/cli.ts gui",
     "build:web": "bash scripts/build-web.sh",
     "build:ext": "bash scripts/build-extensions.sh",
     "build:desktop": "bash scripts/build-desktop.sh",
@@ -18,8 +42,11 @@
     "smoke:pwa": "tsx scripts/pwa-smoke.ts",
     "smoke:ext": "tsx scripts/ext-smoke.ts",
     "smoke:verify": "tsx scripts/verify-mock.ts",
-    "smoke:loop": "tsx scripts/ops-loop-mock.ts"
+    "smoke:loop": "tsx scripts/ops-loop-mock.ts",
+    "smoke:features": "tsx scripts/features-smoke.ts",
+    "test": "npm run typecheck && npm run audit-deps && npm run smoke:verify && npm run smoke:loop && npm run smoke:features && npm run smoke:ui && npm run smoke:pwa && npm run smoke:ext"
   },
+
   "devDependencies": {
     "@capacitor/android": "^7.0.0",
     "@capacitor/cli": "^7.0.0",

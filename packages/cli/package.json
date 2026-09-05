@@ -1,0 +1,30 @@
+{
+  "name": "uiuxaudit",
+  "version": "0.2.0",
+  "description": "Zero-LLM-token web/code → Figma transfer with deterministic UI/UX audit, design tokens, and minimalist GUI workspace",
+  "type": "module",
+  "bin": {
+    "uiuxaudit": "./src/cli.ts",
+    "ua": "./src/cli.ts"
+  },
+  "main": "./src/cli.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ua/core": "workspace:*"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chengmatt416/uiuxaudit.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "figma",
+    "uiux",
+    "audit",
+    "design-tokens",
+    "cli"
+  ]
+}

@@ -1,6 +1,12 @@
 # uiuxaudit
 
-**Repo**: https://github.com/chengmatt416/uiuxaudit · **Release**: https://github.com/chengmatt416/uiuxaudit/releases/latest
+[![CI](https://github.com/chengmatt416/uiuxaudit/actions/workflows/ci.yml/badge.svg)](https://github.com/chengmatt416/uiuxaudit/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Zero-LLM-Tokens](https://img.shields.io/badge/Tokens-0%20(Deterministic)-10b981.svg)](#architecture)
+[![Release](https://img.shields.io/github/v/release/chengmatt416/uiuxaudit?color=38bdf8)](https://github.com/chengmatt416/uiuxaudit/releases/latest)
+
+**Live Web GUI Studio**: [chengmatt416.github.io/uiuxaudit](https://chengmatt416.github.io/uiuxaudit/)  
+**GitHub Repo**: [github.com/chengmatt416/uiuxaudit](https://github.com/chengmatt416/uiuxaudit) · **Releases**: [Releases / Download](https://github.com/chengmatt416/uiuxaudit/releases/latest)
 
 Zero-LLM-token tool that transfers any web page (URL or local/GitHub source)
 into a complete Figma design file, then audits it with deterministic,
@@ -39,6 +45,9 @@ Import the plugin once in Figma:
 ## Usage
 
 ```sh
+# 0. Launch the Production GUI Workspace (Minimalist Dark Studio)
+npm run gui                              # or: npm run ua -- gui [--port 4173]
+
 # 1. Capture a page → .uiuxaudit/out/<slug>.capture.json
 npm run ua -- convert https://example.com --name example
 
@@ -55,16 +64,26 @@ FIGMA_TOKEN=<personal access token> npm run ua -- verify example   # exit 0 = pa
 FIGMA_TOKEN=… npm run ua -- verify                                 # all registered slugs
 
 # 5. Audit + selective apply
-npm run ua -- suggest example            # numbered deterministic findings
+npm run ua -- suggest example            # numbered findings + UI/UX Health Score & WCAG level
 npm run ua -- apply example --ids 1,3-5  # or --all, or interactive picker
 #   URL mode      → writes <slug>.ops.json (plugin Apply mode) AND
 #                   <slug>.applied.capture.json; later `verify` runs compare
 #                   against the APPLIED baseline (--original forces pristine)
 #   project mode  → rewrites the source CSS in place (color/font-size/min-* rules)
 
+# 6. Production Reports, Design Tokens & Code Patches
+npm run ua -- report example             # self-contained interactive HTML audit report
+npm run ua -- report example --format md # GitHub-flavored markdown report for PRs / CI
+npm run ua -- tokens example             # extract design tokens (CSS variables)
+npm run ua -- tokens example --format dtcg # W3C DTCG tokens JSON (Tokens Studio / Style Dictionary)
+npm run ua -- patch example --all        # export copy-pasteable CSS fix declarations
+npm run ua -- diff example               # structural diff: original vs applied capture
+npm run ua -- batch sites.json           # audit full suite of sites with matrix scorecard
+
 # Guardrail
 npm run ua -- audit-deps                 # exits non-zero if any AI SDK appears
 ```
+
 
 ## Verification thresholds (machine-checked)
 

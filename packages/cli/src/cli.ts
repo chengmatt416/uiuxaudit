@@ -10,22 +10,36 @@ import {
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import type { AddressInfo } from "node:net";
 import { createInterface } from "node:readline/promises";
+import { exec, execSync } from "node:child_process";
 import {
   applyFixesToDoc,
+  calculateAuditScore,
   captureUrl,
+  compareCaptures,
+  extractTokens,
   fixesToFigmaOps,
+  formatDiffSummary,
+  generateCssPatch,
+  generateHtmlReport,
+  generateMarkdownReport,
   indexNodes,
   suggestFor,
+  tokensToCss,
+  tokensToDtcg,
+  tokensToTailwind,
   verifyCapture,
 } from "@ua/core";
 import type {
+  AuditScore,
   CaptureDoc,
+  DesignTokens,
   Fix,
   FigmaOp,
   RGBA,
   Suggestion,
   VerifyReport,
 } from "@ua/core";
+
 
 // ---------------- tiny arg parsing ----------------
 
@@ -315,18 +329,27 @@ function cmdSuggest(p: Parsed): number {
     console.error("usage: suggest <slug>");
     return 2;
   }
-  const suggestions = suggestFor(loadCapture(slug));
+  const doc = loadCapture(slug);
+  const suggestions = suggestFor(doc);
+  const score = calculateAuditScore(doc, suggestions);
   mkdirSync(OUT_DIR, { recursive: true });
   const outPath = join(OUT_DIR, `${slug}.suggestions.json`);
   writeFileSync(outPath, JSON.stringify(suggestions, null, 2));
   console.log(`${suggestions.length} suggestions → ${outPath}\n`);
+  console.log(
+    `UI/UX Health Score: ${score.score}/100 [Grade ${score.grade}] · WCAG: ${score.wcagLevel}`,
+  );
+  console.log(
+    `Categories: Accessibility ${score.byCategory.accessibility.score}% · Interaction ${score.byCategory.interaction.score}% · Typography ${score.byCategory.typography.score}% · Layout ${score.byCategory.layout.score}%\n`,
+  );
   suggestions.forEach((s, i) =>
     console.log(
-      `${String(i + 1).padStart(3)} [${s.severity.toUpperCase()}] ${s.rule.padEnd(13)} ${s.message}`,
+      `${String(i + 1).padStart(3)} [${s.severity.toUpperCase()}] ${s.rule.padEnd(16)} ${s.message}`,
     ),
   );
   return 0;
 }
+
 
 // ---------------- apply ----------------
 
@@ -550,6 +573,225 @@ async function cmdApply(p: Parsed): Promise<number> {
   return 0;
 }
 
+// ---------------- report ----------------
+
+async function cmdReport(p: Parsed): Promise<number> {
+  const slug = p._[0];
+  if (!slug) {
+    console.error("usage: report <slug> [--format html|md|json] [--out <file>]");
+    return 2;
+  }
+  const doc = loadCapture(slug);
+  const suggestions = suggestFor(doc);
+  const score = calculateAuditScore(doc, suggestions);
+  const tokens = extractTokens(doc);
+  const format = String(p.flags.format ?? "html").toLowerCase();
+
+  let content: string;
+  let defaultExt = "html";
+  if (format === "md" || format === "markdown") {
+    content = generateMarkdownReport(doc, suggestions, score);
+    defaultExt = "md";
+  } else if (format === "json") {
+    content = JSON.stringify({ slug, score, tokens, suggestions }, null, 2);
+    defaultExt = "json";
+  } else {
+    content = generateHtmlReport(doc, suggestions, score, tokens);
+    defaultExt = "html";
+  }
+
+  mkdirSync(OUT_DIR, { recursive: true });
+  const outPath =
+    typeof p.flags.out === "string"
+      ? resolve(p.flags.out)
+      : join(OUT_DIR, `${slug}.report.${defaultExt}`);
+  writeFileSync(outPath, content);
+  console.log(`UI/UX Audit Report generated (${format.toUpperCase()}) → ${outPath}`);
+  console.log(
+    `Score: ${score.score}/100 (Grade ${score.grade}, WCAG: ${score.wcagLevel}) | ${score.counts.error} errors, ${score.counts.warn} warnings, ${score.counts.info} info`,
+  );
+  return 0;
+}
+
+// ---------------- tokens ----------------
+
+function cmdTokens(p: Parsed): number {
+  const slug = p._[0];
+  if (!slug) {
+    console.error("usage: tokens <slug> [--format css|dtcg|tailwind|json] [--out <file>]");
+    return 2;
+  }
+  const doc = loadCapture(slug);
+  const tokens = extractTokens(doc);
+  const format = String(p.flags.format ?? "css").toLowerCase();
+
+  let outText: string;
+  let ext = "css";
+  if (format === "dtcg") {
+    outText = JSON.stringify(tokensToDtcg(tokens), null, 2);
+    ext = "json";
+  } else if (format === "tailwind") {
+    outText = tokensToTailwind(tokens);
+    ext = "js";
+  } else if (format === "json") {
+    outText = JSON.stringify(tokens, null, 2);
+    ext = "json";
+  } else {
+    outText = tokensToCss(tokens);
+    ext = "css";
+  }
+
+  if (typeof p.flags.out === "string") {
+    writeFileSync(resolve(p.flags.out), outText);
+    console.log(`Design tokens (${format}) → ${p.flags.out}`);
+  } else {
+    mkdirSync(OUT_DIR, { recursive: true });
+    const outPath = join(OUT_DIR, `${slug}.tokens.${ext}`);
+    writeFileSync(outPath, outText);
+    console.log(`Design tokens (${format}) → ${outPath}`);
+  }
+  return 0;
+}
+
+// ---------------- patch ----------------
+
+async function cmdPatch(p: Parsed): Promise<number> {
+  const slug = p._[0];
+  if (!slug) {
+    console.error('usage: patch <slug> [--ids "1,3-5"] [--all] [--out <file>]');
+    return 2;
+  }
+  const doc = loadCapture(slug);
+  const suggestions = suggestFor(doc);
+  let selected: Suggestion[];
+  if (p.flags.all === true) {
+    selected = suggestions.filter((s) => s.fixes.length > 0);
+  } else if (typeof p.flags.ids === "string") {
+    selected = parseIdx(p.flags.ids, suggestions.length)
+      .map((i) => suggestions[i])
+      .filter((s) => s.fixes.length > 0);
+  } else {
+    selected = await pickInteractive(suggestions);
+  }
+  if (!selected.length) {
+    console.log("nothing selected");
+    return 0;
+  }
+  const fixes = selected.flatMap((s) => s.fixes);
+  const css = generateCssPatch(doc, fixes);
+  if (typeof p.flags.out === "string") {
+    writeFileSync(resolve(p.flags.out), css);
+    console.log(`CSS patch written to ${p.flags.out}`);
+  } else {
+    mkdirSync(OUT_DIR, { recursive: true });
+    const outPath = join(OUT_DIR, `${slug}.patch.css`);
+    writeFileSync(outPath, css);
+    console.log(`${fixes.length} fixes → ${outPath}`);
+  }
+  return 0;
+}
+
+// ---------------- diff ----------------
+
+function cmdDiff(p: Parsed): number {
+  const slug = p._[0];
+  if (!slug) {
+    console.error("usage: diff <slug> [applied-slug]");
+    return 2;
+  }
+  const origPath = join(OUT_DIR, `${slug}.capture.json`);
+  const appPath = p._[1]
+    ? join(OUT_DIR, `${p._[1]}.capture.json`)
+    : join(OUT_DIR, `${slug}.applied.capture.json`);
+  if (!existsSync(origPath)) {
+    console.error(`original capture not found: ${origPath}`);
+    return 1;
+  }
+  if (!existsSync(appPath)) {
+    console.error(`applied capture not found: ${appPath}. Run apply first.`);
+    return 1;
+  }
+  const origDoc = JSON.parse(readFileSync(origPath, "utf8")) as CaptureDoc;
+  const appDoc = JSON.parse(readFileSync(appPath, "utf8")) as CaptureDoc;
+  const diff = compareCaptures(origDoc, appDoc);
+  console.log(formatDiffSummary(diff));
+  return 0;
+}
+
+// ---------------- batch ----------------
+
+async function cmdBatch(p: Parsed): Promise<number> {
+  const manifestFile = p._[0] || "sites.json";
+  if (!existsSync(manifestFile)) {
+    console.error(`Manifest file "${manifestFile}" not found`);
+    return 2;
+  }
+  interface SiteItem {
+    slug: string;
+    url: string;
+  }
+  const sites = JSON.parse(readFileSync(manifestFile, "utf8")) as SiteItem[];
+  console.log(`Auditing batch of ${sites.length} sites from ${manifestFile}…\n`);
+
+  const rows: Array<{
+    slug: string;
+    url: string;
+    nodes: number;
+    score: number;
+    grade: string;
+    wcag: string;
+    errors: number;
+    warns: number;
+    infos: number;
+  }> = [];
+
+  for (const s of sites) {
+    try {
+      const capPath = join(OUT_DIR, `${s.slug}.capture.json`);
+      let doc: CaptureDoc;
+      if (existsSync(capPath)) {
+        doc = JSON.parse(readFileSync(capPath, "utf8")) as CaptureDoc;
+      } else {
+        console.log(`[${s.slug}] Capturing ${s.url}…`);
+        doc = await captureUrl(s.url, { slug: s.slug });
+        mkdirSync(OUT_DIR, { recursive: true });
+        writeFileSync(capPath, JSON.stringify(doc));
+      }
+      const suggs = suggestFor(doc);
+      const score = calculateAuditScore(doc, suggs);
+      rows.push({
+        slug: s.slug,
+        url: s.url,
+        nodes: doc.nodes.length,
+        score: score.score,
+        grade: score.grade,
+        wcag: score.wcagLevel,
+        errors: score.counts.error,
+        warns: score.counts.warn,
+        infos: score.counts.info,
+      });
+    } catch (err) {
+      console.error(`[${s.slug}] failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  console.log("\n" + "=".repeat(80));
+  console.log("UI/UX AUDIT BATCH MATRIX");
+  console.log("=".repeat(80));
+  console.log(
+    `${"Slug".padEnd(16)} ${"Score".padEnd(8)} ${"Grade".padEnd(8)} ${"WCAG".padEnd(14)} ${"Issues (E/W/I)".padEnd(18)} URL`,
+  );
+  console.log("-".repeat(80));
+  for (const r of rows) {
+    const issuesStr = `${r.errors} err / ${r.warns} wrn / ${r.infos} inf`;
+    console.log(
+      `${r.slug.padEnd(16)} ${(String(r.score) + "/100").padEnd(8)} ${r.grade.padEnd(8)} ${r.wcag.padEnd(14)} ${issuesStr.padEnd(18)} ${r.url}`,
+    );
+  }
+  console.log("=".repeat(80));
+  return 0;
+}
+
 // ---------------- dependency audit ----------------
 
 function cmdAuditDeps(): number {
@@ -579,17 +821,201 @@ function cmdAuditDeps(): number {
   return 0;
 }
 
+// ---------------- GUI server ----------------
+
+function findWebDist(): string {
+  const candidates = [
+    resolve(process.cwd(), "apps/web/dist"),
+    resolve(process.cwd(), "web/dist"),
+    join(resolve("."), "apps/web/dist"),
+  ];
+  for (const c of candidates) {
+    if (existsSync(join(c, "index.html"))) return c;
+  }
+  // Try building if not present
+  try {
+    const buildScript = resolve(process.cwd(), "scripts/build-web.sh");
+    if (existsSync(buildScript)) {
+      console.log("[GUI] apps/web/dist not found, building web assets…");
+      execSync("bash scripts/build-web.sh", { stdio: "inherit" });
+      for (const c of candidates) {
+        if (existsSync(join(c, "index.html"))) return c;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  throw new Error("Could not find apps/web/dist. Run 'npm run build:web' first.");
+}
+
+function openBrowser(url: string): void {
+  try {
+    const plat = process.platform;
+    const cmd = plat === "darwin" ? "open" : plat === "win32" ? "start" : "xdg-open";
+    exec(`${cmd} "${url}"`);
+  } catch {
+    // ignore
+  }
+}
+
+async function cmdGui(p: Parsed): Promise<number> {
+  const port = num(p.flags.port, 4173);
+  let webDist: string;
+  try {
+    webDist = findWebDist();
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
+
+  const server = createServer(async (req, res) => {
+    // CORS headers
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const parsedUrl = new URL(req.url ?? "/", "http://127.0.0.1");
+    const pathname = parsedUrl.pathname;
+
+    // API: Convert URL via headless Chromium
+    if (req.method === "POST" && pathname === "/api/convert") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", async () => {
+        try {
+          const { url, name, viewportWidth, viewportHeight } = JSON.parse(body || "{}") as {
+            url?: string;
+            name?: string;
+            viewportWidth?: number;
+            viewportHeight?: number;
+          };
+          if (!url) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: false, error: "Missing url parameter" }));
+            return;
+          }
+          const slug = name || slugFromUrl(url);
+          console.log(`[GUI] Capturing URL: ${url} (slug: ${slug})…`);
+          const doc = await captureUrl(url, {
+            slug,
+            viewportWidth: viewportWidth ? Number(viewportWidth) : undefined,
+            viewportHeight: viewportHeight ? Number(viewportHeight) : undefined,
+          });
+          const capPath = join(OUT_DIR, `${slug}.capture.json`);
+          mkdirSync(OUT_DIR, { recursive: true });
+          writeFileSync(capPath, JSON.stringify(doc));
+          console.log(`[GUI] Capture saved → ${capPath}`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, doc }));
+        } catch (err) {
+          console.error("[GUI] Capture error:", err);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+        }
+      });
+      return;
+    }
+
+    // API: List existing captures
+    if (req.method === "GET" && pathname === "/api/captures") {
+      try {
+        const files = existsSync(OUT_DIR)
+          ? (await import("node:fs/promises")).readdir(OUT_DIR)
+          : [];
+        const captures = (await files)
+          .filter((f) => f.endsWith(".capture.json") && !f.endsWith(".applied.capture.json"))
+          .map((f) => f.replace(/\.capture\.json$/, ""));
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, captures }));
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: String(err) }));
+      }
+      return;
+    }
+
+    // Static assets from apps/web/dist
+    let rel = pathname === "/" ? "index.html" : pathname.slice(1);
+    let filePath = resolve(join(webDist, rel));
+    if (!filePath.startsWith(webDist + sep) && filePath !== webDist) {
+      res.writeHead(403);
+      res.end();
+      return;
+    }
+    try {
+      if (statSync(filePath).isDirectory()) filePath = join(filePath, "index.html");
+    } catch {
+      filePath = join(webDist, "index.html"); // SPA fallback
+    }
+
+    try {
+      const data = readFileSync(filePath);
+      res.writeHead(200, {
+        "Content-Type": MIME[extname(filePath)] ?? "application/octet-stream",
+      });
+      res.end(data);
+    } catch {
+      res.writeHead(404);
+      res.end("Not Found");
+    }
+  });
+
+  const { promise, resolve: listening } = Promise.withResolvers<void>();
+  server.listen(port, "127.0.0.1", () => listening());
+  await promise;
+
+  const actualPort = (server.address() as AddressInfo).port;
+  const localUrl = `http://127.0.0.1:${actualPort}`;
+  console.log(`\n \x1b[32m✔\x1b[0m uiuxaudit GUI running at: \x1b[36m${localUrl}\x1b[0m`);
+  console.log(` Minimalist UI workspace & real-time headless capture server active.`);
+  console.log(` Press Ctrl+C to stop.\n`);
+
+  if (!p.flags["no-open"]) {
+    openBrowser(localUrl);
+  }
+
+  await new Promise<void>((resolvePromise) => {
+    process.on("SIGINT", () => {
+      console.log("\n[GUI] Shutting down server…");
+      server.close(() => resolvePromise());
+    });
+    process.on("SIGTERM", () => {
+      server.close(() => resolvePromise());
+    });
+  });
+  return 0;
+}
+
 // ---------------- entry ----------------
 
 const HELP = `uiuxaudit — zero-token code/web → Figma transfer with UI/UX audit
 
 commands:
+  gui [--port P] [--no-open]
   convert <url> [--name slug] [--vw W] [--vh H]
   convert --project <dir> [--entry /index.html] [--name slug]
   register <slug> --link <figma-file-url>
   verify [slug…]          requires FIGMA_TOKEN
   suggest <slug>
   apply <slug> [--ids "1,3-5"] [--all]
+  report <slug> [--format html|md|json] [--out <file>]
+  tokens <slug> [--format css|dtcg|tailwind|json] [--out <file>]
+  patch <slug> [--ids "1,3-5"] [--all] [--out <file>]
+  diff <slug> [applied-slug]
+  batch [sites.json]
   audit-deps`;
 
 export async function main(argv: string[]): Promise<number> {
@@ -597,6 +1023,8 @@ export async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = p._;
   const sub: Parsed = { _: rest, flags: p.flags };
   switch (cmd) {
+    case "gui":
+      return await cmdGui(sub);
     case "convert":
       return await cmdConvert(sub);
     case "register":
@@ -607,6 +1035,16 @@ export async function main(argv: string[]): Promise<number> {
       return cmdSuggest(sub);
     case "apply":
       return await cmdApply(sub);
+    case "report":
+      return await cmdReport(sub);
+    case "tokens":
+      return cmdTokens(sub);
+    case "patch":
+      return await cmdPatch(sub);
+    case "diff":
+      return cmdDiff(sub);
+    case "batch":
+      return await cmdBatch(sub);
     case "audit-deps":
       return cmdAuditDeps();
     default:
@@ -614,6 +1052,7 @@ export async function main(argv: string[]): Promise<number> {
       return cmd ? 2 : 0;
   }
 }
+
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   process.exit(await main(process.argv.slice(2)));

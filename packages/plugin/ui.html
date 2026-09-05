@@ -6,10 +6,26 @@
       body {
         font: 12px/1.5 ui-sans-serif, system-ui, sans-serif;
         margin: 0;
-        padding: 12px;
+        padding: 14px;
         color: #1e1e1e;
+        background: #fff;
       }
-      h3 { margin: 0 0 10px; }
+      h3 { margin: 0 0 10px; font-size: 15px; display: flex; align-items: center; justify-content: space-between; }
+      .tag { font-size: 10px; background: #e6f4ea; color: #137333; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+      .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; }
+      .tab-btn {
+        background: transparent;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-weight: 600;
+        color: #555;
+        cursor: pointer;
+        font-size: 11.5px;
+      }
+      .tab-btn.active { background: #18a0fb; color: #fff; }
+      .tab-pane { display: none; }
+      .tab-pane.active { display: block; }
       .btn {
         display: inline-block;
         padding: 7px 12px;
@@ -19,38 +35,71 @@
         cursor: pointer;
         font-weight: 600;
         border: none;
+        font-size: 12px;
       }
+      .btn:hover { background: #0d8de3; }
       .btn.ghost { background: #eeeef0; color: #1e1e1e; }
-      .st { margin: 8px 0; min-height: 16px; color: #444; }
-      .ok { color: #0c8a52; }
-      .bad { color: #d6443c; }
-      hr { border: none; border-top: 1px solid #e5e5e5; margin: 14px 0; }
-      #log { max-height: 180px; overflow: auto; font-size: 11px; white-space: pre-wrap; color: #555; }
+      .btn.ghost:hover { background: #e2e2e5; }
+      .st { margin: 8px 0; min-height: 16px; color: #444; font-size: 11.5px; }
+      .ok { color: #0c8a52; font-weight: 600; }
+      .bad { color: #d6443c; font-weight: 600; }
+      hr { border: none; border-top: 1px solid #e5e5e5; margin: 12px 0; }
+      #log { max-height: 140px; overflow: auto; font-size: 10.5px; white-space: pre-wrap; color: #555; background: #f7f7f8; border-radius: 6px; padding: 8px; border: 1px solid #eee; margin-top: 8px; }
       input[type="file"] { display: none; }
-      .hint { color: #888; margin: 6px 0 0; font-size: 11px; }
+      .hint { color: #888; margin: 4px 0 0; font-size: 11px; }
+      .paste-box {
+        width: 100%;
+        box-sizing: border-box;
+        height: 110px;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 11px;
+        resize: vertical;
+        margin-bottom: 8px;
+      }
     </style>
   </head>
   <body>
-    <h3>uiuxaudit</h3>
+    <h3>
+      <span>uiuxaudit</span>
+      <span class="tag">ZERO-TOKEN</span>
+    </h3>
 
-    <label class="btn">
-      Import capture(s)
-      <input id="file" type="file" accept=".json,application/json" multiple />
-    </label>
-    <p class="hint">
-      Select one or more *.capture.json files — each becomes a
-      <b>page:&lt;slug&gt;</b> frame on the current page.
-    </p>
-    <div id="importStatus" class="st"></div>
+    <div class="tabs">
+      <button id="btnTabFiles" class="tab-btn active">File Import</button>
+      <button id="btnTabPaste" class="tab-btn">Direct Paste</button>
+    </div>
 
-    <hr />
+    <!-- Tab 1: File Pickers -->
+    <div id="paneFiles" class="tab-pane active">
+      <label class="btn">
+        Import capture(s)
+        <input id="file" type="file" accept=".json,application/json" multiple />
+      </label>
+      <p class="hint">
+        Select <b>*.capture.json</b> files — each builds a <b>page:&lt;slug&gt;</b> frame.
+      </p>
+      <div id="importStatus" class="st"></div>
 
-    <label class="btn ghost">
-      Apply ops
-      <input id="ops" type="file" accept=".json,application/json" />
-    </label>
-    <p class="hint">Select a <b>*.ops.json</b> produced by <code>apply</code>.</p>
-    <div id="applyStatus" class="st"></div>
+      <hr />
+
+      <label class="btn ghost">
+        Apply ops
+        <input id="ops" type="file" accept=".json,application/json" />
+      </label>
+      <p class="hint">Select a <b>*.ops.json</b> produced by <code>apply</code>.</p>
+      <div id="applyStatus" class="st"></div>
+    </div>
+
+    <!-- Tab 2: Direct Paste -->
+    <div id="panePaste" class="tab-pane">
+      <p class="hint" style="margin-top:0">Paste a <code>*.capture.json</code> or <code>*.ops.json</code> payload directly:</p>
+      <textarea id="pasteInput" class="paste-box" placeholder='{"version":1,"slug":"...","nodes":[...]} or {"slug":"...","ops":[...]}'></textarea>
+      <button id="runPasteBtn" class="btn">Run Pasted JSON</button>
+      <div id="pasteStatus" class="st"></div>
+    </div>
 
     <div id="log"></div>
 
@@ -65,9 +114,31 @@
       }
       function setStatus(id, text, cls) {
         const el = document.getElementById(id);
-        el.textContent = text;
-        el.className = "st" + (cls ? " " + cls : "");
+        if (el) {
+          el.textContent = text;
+          el.className = "st" + (cls ? " " + cls : "");
+        }
       }
+
+      // Tab switcher
+      const btnTabFiles = document.getElementById("btnTabFiles");
+      const btnTabPaste = document.getElementById("btnTabPaste");
+      const paneFiles = document.getElementById("paneFiles");
+      const panePaste = document.getElementById("panePaste");
+
+      btnTabFiles.addEventListener("click", () => {
+        btnTabFiles.classList.add("active");
+        btnTabPaste.classList.remove("active");
+        paneFiles.classList.add("active");
+        panePaste.classList.remove("active");
+      });
+
+      btnTabPaste.addEventListener("click", () => {
+        btnTabPaste.classList.add("active");
+        btnTabFiles.classList.remove("active");
+        panePaste.classList.add("active");
+        paneFiles.classList.remove("active");
+      });
 
       document.getElementById("file").addEventListener("change", async (e) => {
         const files = Array.from(e.target.files || []);
@@ -77,7 +148,6 @@
           try {
             const payload = JSON.parse(await f.text());
             parent.postMessage({ pluginMessage: { type: "import", payload } }, "*");
-            // code.js replies per import via postMessage; log lands below.
           } catch (err) {
             setStatus("importStatus", "bad JSON: " + err, "bad");
           }
@@ -99,6 +169,28 @@
         e.target.value = "";
       });
 
+      document.getElementById("runPasteBtn").addEventListener("click", () => {
+        const text = document.getElementById("pasteInput").value.trim();
+        if (!text) {
+          setStatus("pasteStatus", "paste JSON first", "bad");
+          return;
+        }
+        try {
+          const payload = JSON.parse(text);
+          if (Array.isArray(payload.nodes)) {
+            setStatus("pasteStatus", "importing capture…");
+            parent.postMessage({ pluginMessage: { type: "import", payload } }, "*");
+          } else if (Array.isArray(payload.ops)) {
+            setStatus("pasteStatus", "applying ops…");
+            parent.postMessage({ pluginMessage: { type: "apply", payload } }, "*");
+          } else {
+            setStatus("pasteStatus", "unrecognized payload (missing nodes or ops)", "bad");
+          }
+        } catch (err) {
+          setStatus("pasteStatus", "invalid JSON: " + err, "bad");
+        }
+      });
+
       window.onmessage = (event) => {
         const msg = event.data && event.data.pluginMessage;
         if (!msg) return;
@@ -108,6 +200,7 @@
             `imported: ${msg.created} nodes created, ${msg.failed} failed`,
             msg.failed ? "bad" : "ok",
           );
+          setStatus("pasteStatus", `imported: ${msg.created} nodes created`, "ok");
           log("import done — created " + msg.created + ", failed " + msg.failed);
           if (msg.detail) log(msg.detail, "bad");
         } else if (msg.type === "applied") {
@@ -116,10 +209,14 @@
             `applied ${msg.applied} ops, skipped ${msg.skipped}`,
             msg.skipped ? "bad" : "ok",
           );
+          setStatus("pasteStatus", `applied ${msg.applied} ops`, "ok");
           log("apply done — applied " + msg.applied + ", skipped " + msg.skipped);
           if (msg.detail) log(msg.detail, "bad");
+        } else if (msg.type === "stylesCreated") {
+          log("created " + msg.count + " Figma local styles", "ok");
         } else if (msg.type === "error") {
           setStatus("applyStatus", msg.message, "bad");
+          setStatus("pasteStatus", msg.message, "bad");
           log("error: " + msg.message, "bad");
         }
       };

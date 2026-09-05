@@ -83,21 +83,83 @@ export interface CaptureDoc {
   capturedAt: string;
 }
 
+export type RuleType =
+  | "contrast"
+  | "touch-target"
+  | "font-scale"
+  | "spacing-rhythm"
+  | "line-length"
+  | "min-font-size"
+  | "heading-hierarchy"
+  | "interactive-labels";
+
+export type AuditCategory = "accessibility" | "interaction" | "typography" | "layout";
+
 /** One suggested change, deterministically derived from a capture. */
 export interface Suggestion {
   /** Stable id: rule-priority ordinal, e.g. "s001". */
   id: string;
-  rule:
-    | "contrast"
-    | "touch-target"
-    | "font-scale"
-    | "spacing-rhythm"
-    | "line-length";
+  rule: RuleType;
+  category?: AuditCategory;
   severity: "error" | "warn" | "info";
   message: string;
   targetIds: string[];
   /** Fixes to apply. */
   fixes: Fix[];
+}
+
+export interface AuditCategoryScore {
+  name: string;
+  score: number;
+  errors: number;
+  warns: number;
+  infos: number;
+  passed: number;
+  total: number;
+}
+
+export interface AuditScore {
+  score: number;
+  grade: "A+" | "A" | "B" | "C" | "D" | "F";
+  wcagLevel: "AAA" | "AA" | "A" | "Non-compliant";
+  passedChecks: number;
+  totalChecks: number;
+  counts: { error: number; warn: number; info: number };
+  byCategory: Record<AuditCategory, AuditCategoryScore>;
+}
+
+export interface ColorToken {
+  name: string;
+  hex: string;
+  rgba: RGBA;
+  role: "background" | "text" | "accent" | "border" | "surface";
+  count: number;
+}
+
+export interface DesignTokens {
+  colors: ColorToken[];
+  typography: {
+    fontFamilies: string[];
+    fontSizeScale: number[];
+    fontWeights: number[];
+    lineHeights: number[];
+  };
+  spacing: number[];
+  radii: number[];
+}
+
+export interface CaptureDiff {
+  slug: string;
+  nodeCountBefore: number;
+  nodeCountAfter: number;
+  modifiedCount: number;
+  changes: Array<{
+    nodeId: string;
+    tag: string;
+    field: string;
+    before: unknown;
+    after: unknown;
+  }>;
 }
 
 export type Fix =
@@ -139,3 +201,4 @@ export interface Mismatch {
   actual: string;
   delta?: number;
 }
+

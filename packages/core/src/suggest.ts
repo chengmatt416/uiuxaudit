@@ -1,4 +1,5 @@
 import type {
+  AuditScore,
   CaptureDoc,
   CaptureNode,
   Fix,
@@ -92,8 +93,8 @@ const SEVERITY_RANK: Record<string, number> = { error: 0, warn: 1, info: 2 };
 /**
  * Deterministic rule-based UI/UX audit over a capture document.
  * Rules: WCAG contrast, touch-target size, font-scale consolidation,
- * line length. Same input always yields identical suggestions in the
- * same order.
+ * line length, minimum font size, heading hierarchy, interactive labels,
+ * and design grid spacing rhythm.
  */
 export function suggestFor(doc: CaptureDoc, limit = 300): Suggestion[] {
   const raw: Array<Omit<Suggestion, "id">> = [];
@@ -109,6 +110,7 @@ export function suggestFor(doc: CaptureDoc, limit = 300): Suggestion[] {
     const fixed = adjustForContrast(n.textColor, bg, target);
     raw.push({
       rule: "contrast",
+      category: "accessibility",
       severity: ratio < target / 2 ? "error" : "warn",
       message: `Contrast ${ratio.toFixed(2)}:1 < ${target}:1 for ${(n.fontSize as number).toFixed(1)}px "${(n.text ?? "").trim().slice(0, 40)}"`,
       targetIds: [n.id],
@@ -124,6 +126,7 @@ export function suggestFor(doc: CaptureDoc, limit = 300): Suggestion[] {
     if (n.w >= 24 && n.h >= 24) continue;
     raw.push({
       rule: "touch-target",
+      category: "interaction",
       severity: "warn",
       message: `<${n.tag.toLowerCase()}> ${n.w.toFixed(0)}x${n.h.toFixed(0)}px below 24x24px minimum`,
       targetIds: [n.id],
@@ -169,6 +172,7 @@ export function suggestFor(doc: CaptureDoc, limit = 300): Suggestion[] {
     if (fixes.length) {
       raw.push({
         rule: "font-scale",
+        category: "typography",
         severity: "info",
         message: `${distinct.length} distinct font sizes; consolidate outliers onto scale ${kept.join("/")}px (${fixes.length} nodes)`,
         targetIds,
@@ -184,11 +188,90 @@ export function suggestFor(doc: CaptureDoc, limit = 300): Suggestion[] {
     if (estCharsPerLine <= 100) continue;
     raw.push({
       rule: "line-length",
+      category: "typography",
       severity: "info",
       message: `Text block spans ~${estCharsPerLine.toFixed(0)} em-halved characters per line (>100); consider constraining measure`,
       targetIds: [n.id],
       fixes: [],
     });
+  }
+
+  // ---- R5: minimum legible font size (< 12px) ----
+  for (const n of doc.nodes) {
+    if (n.kind !== "text" || !n.fontSize) continue;
+    if (n.fontSize < 12 && (n.text ?? "").trim().length > 0) {
+      raw.push({
+        rule: "min-font-size",
+        category: "accessibility",
+        severity: "warn",
+        message: `Font size ${(n.fontSize as number).toFixed(1)}px is below 12px legibility threshold for "${(n.text ?? "").trim().slice(0, 30)}"`,
+        targetIds: [n.id],
+        fixes: [{ kind: "setFontSize", nodeId: n.id, value: 12 }],
+      });
+    }
+  }
+
+  // ---- R6: heading hierarchy skips ----
+  let lastH = 0;
+  for (const n of doc.nodes) {
+    const m = n.tag.toUpperCase().match(/^H([1-6])$/);
+    if (!m) continue;
+    const cur = parseInt(m[1], 10);
+    if (lastH > 0 && cur > lastH + 1) {
+      raw.push({
+        rule: "heading-hierarchy",
+        category: "typography",
+        severity: "info",
+        message: `Heading level jumped from <h${lastH}> to <h${cur}> without intermediate levels`,
+        targetIds: [n.id],
+        fixes: [],
+      });
+    }
+    lastH = cur;
+  }
+
+  // ---- R7: interactive element labels ----
+  for (const n of doc.nodes) {
+    if (!n.interactive || n.kind === "text") continue;
+    const tag = n.tag.toUpperCase();
+    if (tag === "BUTTON" || tag === "A") {
+      const hasTextChild = doc.nodes.some(
+        (o) =>
+          (o.parent === n.id ||
+            (o.x >= n.x - 4 && o.y >= n.y - 4 && o.x <= n.x + n.w + 4 && o.y <= n.y + n.h + 4)) &&
+          (o.kind === "text" || (o.text && o.text.trim().length > 0)),
+      );
+      if (!hasTextChild && (!n.text || n.text.trim().length === 0) && n.w > 0 && n.h > 0) {
+        raw.push({
+          rule: "interactive-labels",
+          category: "accessibility",
+          severity: "warn",
+          message: `<${n.tag.toLowerCase()}> interactive control has no text or accessible label`,
+          targetIds: [n.id],
+          fixes: [],
+        });
+      }
+
+    }
+  }
+
+  // ---- R8: spacing & layout grid rhythm (4px/8px baseline) ----
+  for (const n of doc.nodes) {
+    if (n.kind !== "frame" || n.w < 32 || n.h < 32) continue;
+    const isIntW = Math.abs(n.w - Math.round(n.w)) < 1e-3;
+    const isIntH = Math.abs(n.h - Math.round(n.h)) < 1e-3;
+    if (isIntW && isIntH && n.w % 4 !== 0 && n.h % 4 !== 0 && n.w > 48 && n.h > 48) {
+      const snapW = Math.round(n.w / 4) * 4;
+      const snapH = Math.round(n.h / 4) * 4;
+      raw.push({
+        rule: "spacing-rhythm",
+        category: "layout",
+        severity: "info",
+        message: `<${n.tag.toLowerCase()}> ${n.w}×${n.h}px deviates from 4px/8px design grid (nearest: ${snapW}×${snapH}px)`,
+        targetIds: [n.id],
+        fixes: [{ kind: "setSize", nodeId: n.id, w: snapW, h: snapH }],
+      });
+    }
   }
 
   raw.sort(
@@ -211,6 +294,7 @@ export function suggestFor(doc: CaptureDoc, limit = 300): Suggestion[] {
     picked.push({
       id: "s" + String(picked.length + 1).padStart(3, "0"),
       rule: "contrast",
+      category: "accessibility",
       severity: "info",
       message: `(+${raw.length - limit} further findings truncated deterministically)`,
       targetIds: [],
@@ -218,6 +302,105 @@ export function suggestFor(doc: CaptureDoc, limit = 300): Suggestion[] {
     });
   }
   return picked;
+}
+
+/**
+ * Calculates a comprehensive UI/UX Health Score (0-100), letter grade,
+ * WCAG 2.1 compliance level, and category breakdowns.
+ */
+export function calculateAuditScore(
+  doc: CaptureDoc,
+  suggestions: Suggestion[],
+): AuditScore {
+  let errorCount = 0;
+  let warnCount = 0;
+  let infoCount = 0;
+
+  const cats = {
+    accessibility: { errors: 0, warns: 0, infos: 0, total: 0 },
+    interaction: { errors: 0, warns: 0, infos: 0, total: 0 },
+    typography: { errors: 0, warns: 0, infos: 0, total: 0 },
+    layout: { errors: 0, warns: 0, infos: 0, total: 0 },
+  };
+
+  for (const s of suggestions) {
+    const c = s.category ?? (
+      s.rule === "contrast" || s.rule === "min-font-size" || s.rule === "interactive-labels"
+        ? "accessibility"
+        : s.rule === "touch-target"
+          ? "interaction"
+          : s.rule === "font-scale" || s.rule === "line-length" || s.rule === "heading-hierarchy"
+            ? "typography"
+            : "layout"
+    );
+    const target = cats[c] || cats.accessibility;
+    target.total++;
+    if (s.severity === "error") {
+      errorCount++;
+      target.errors++;
+    } else if (s.severity === "warn") {
+      warnCount++;
+      target.warns++;
+    } else {
+      infoCount++;
+      target.infos++;
+    }
+  }
+
+  const penalty = errorCount * 12 + warnCount * 4 + infoCount * 1;
+  const score = Math.max(0, Math.min(100, 100 - penalty));
+
+  let grade: AuditScore["grade"] = "F";
+  if (score >= 95) grade = "A+";
+  else if (score >= 90) grade = "A";
+  else if (score >= 80) grade = "B";
+  else if (score >= 70) grade = "C";
+  else if (score >= 60) grade = "D";
+
+  let wcagLevel: AuditScore["wcagLevel"] = "AAA";
+  if (errorCount > 0) wcagLevel = "Non-compliant";
+  else if (warnCount > 0) wcagLevel = "AA";
+
+  const totalChecks = Math.max(doc.nodes.length * 3, 10);
+  const passedChecks = Math.max(0, totalChecks - (errorCount + warnCount + infoCount));
+
+  const scoreForCat = (item: { errors: number; warns: number; infos: number }) =>
+    Math.max(0, Math.min(100, 100 - (item.errors * 20 + item.warns * 8 + item.infos * 2)));
+
+  return {
+    score,
+    grade,
+    wcagLevel,
+    passedChecks,
+    totalChecks,
+    counts: { error: errorCount, warn: warnCount, info: infoCount },
+    byCategory: {
+      accessibility: {
+        name: "Accessibility & WCAG",
+        score: scoreForCat(cats.accessibility),
+        ...cats.accessibility,
+        passed: Math.max(0, doc.nodes.length - cats.accessibility.errors - cats.accessibility.warns),
+      },
+      interaction: {
+        name: "Mobile & Touch Targets",
+        score: scoreForCat(cats.interaction),
+        ...cats.interaction,
+        passed: Math.max(0, doc.nodes.length - cats.interaction.errors - cats.interaction.warns),
+      },
+      typography: {
+        name: "Typography & Legibility",
+        score: scoreForCat(cats.typography),
+        ...cats.typography,
+        passed: Math.max(0, doc.nodes.length - cats.typography.errors - cats.typography.warns),
+      },
+      layout: {
+        name: "Layout & Spacing Rhythm",
+        score: scoreForCat(cats.layout),
+        ...cats.layout,
+        passed: Math.max(0, doc.nodes.length - cats.layout.errors - cats.layout.warns),
+      },
+    },
+  };
 }
 
 export interface NodeIndex {
@@ -229,3 +412,4 @@ export function indexNodes(doc: CaptureDoc): NodeIndex {
   for (const n of doc.nodes) m.set(n.id, n);
   return { byId: (id) => m.get(id) };
 }
+

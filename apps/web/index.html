@@ -3,68 +3,281 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>uiuxaudit</title>
-    <meta name="theme-color" content="#0e1116" />
+    <title>uiuxaudit — Production UI/UX Audit & Figma Engine</title>
+    <meta name="theme-color" content="#07080a" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon-192.png" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <header>
-      <h1>uiuxaudit</h1>
+    <!-- Top Minimalist Navigation Bar -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-mark">
+          <span class="logo-dot"></span>
+        </div>
+        <div class="logo-text">uiuxaudit</div>
+        <span class="version-tag">PROD</span>
+      </div>
+
+      <div class="convert-bar" id="convertBar">
+        <input id="convUrl" class="url-input" placeholder="Enter URL (https://...) to capture & audit..." />
+        <button id="convBtn" class="btn btn-primary convert-btn">
+          <span class="btn-text">Convert</span>
+        </button>
+      </div>
+
+      <div class="preset-wrapper">
+        <select id="presetSelect" class="minimal-select" title="Select a sample site">
+          <option value="" disabled selected>Presets…</option>
+          <option value="example">Example Domain (Basic)</option>
+          <option value="saas">SaaS Dashboard (Complex)</option>
+          <option value="mobile">Mobile Flow (Touch Targets)</option>
+        </select>
+      </div>
+
       <span class="meta" id="meta"></span>
-      <button id="captureTabBtn" class="btn primary" hidden>Capture current tab</button>
-      <input id="convUrl" class="urlbox" placeholder="https://example.com — Convert URL" hidden />
-      <button id="convBtn" class="btn primary" hidden>Convert</button>
-      <span class="spacer"></span>
-      <label class="btn">
-        Load capture
-        <input id="file" type="file" accept=".json,application/json" hidden />
-      </label>
-      <button id="verifyBtn" class="btn ghost" hidden>Verify in Figma…</button>
+
+      <div class="header-actions">
+        <button id="captureTabBtn" class="btn btn-ghost" hidden>Capture Tab</button>
+        <button id="tokensBtn" class="btn btn-ghost" title="Design System Tokens" hidden>Tokens</button>
+        <button id="reportBtn" class="btn btn-ghost" title="Executive HTML Audit Report" hidden>Report</button>
+        <button id="copyCssBtn" class="btn btn-ghost" title="Copy CSS overrides" hidden>CSS</button>
+        <button id="copyOpsBtn" class="btn btn-ghost" title="Copy Figma Ops" hidden>Figma Ops</button>
+        <label class="btn btn-outline file-label">
+          <span>Load JSON</span>
+          <input id="file" type="file" accept=".json,application/json" hidden />
+        </label>
+        <button id="verifyBtn" class="btn btn-ghost verify-toggle-btn" hidden>Verify</button>
+      </div>
     </header>
 
-    <main>
-      <section id="stage">
-        <div id="canvasWrap"><div id="canvas"></div></div>
-        <div id="dropHint">
-          <div>Drop a <b>*.capture.json</b> here or use “Load capture”.</div>
-          <small>Zero-token pipeline: capture → Figma import → verify → suggest → apply.</small>
+    <!-- Sleek Minimalist Scorecard Ribbon -->
+    <div id="scorecardBar" class="scorecard-ribbon" hidden>
+      <div class="score-card-main">
+        <div class="score-gauge" id="scoreGauge">
+          <span class="score-val" id="healthScoreNum">--</span>
+        </div>
+        <div class="score-meta">
+          <div class="score-grade-text" id="healthScoreGrade">Grade --</div>
+          <div class="score-wcag-badge" id="healthScoreWcag">WCAG --</div>
+        </div>
+      </div>
+
+      <div class="score-counts-pills">
+        <button class="count-pill error" id="btnFilterError" title="Filter errors">
+          <span class="pill-dot error"></span>
+          <span id="cntError">0 errors</span>
+        </button>
+        <button class="count-pill warn" id="btnFilterWarn" title="Filter warnings">
+          <span class="pill-dot warn"></span>
+          <span id="cntWarn">0 warnings</span>
+        </button>
+        <button class="count-pill info" id="btnFilterInfo" title="Filter info">
+          <span class="pill-dot info"></span>
+          <span id="cntInfo">0 info</span>
+        </button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="cat-meters-group">
+        <div class="cat-meter-item">
+          <div class="cat-meter-header">
+            <span class="cat-meter-label">A11y</span>
+            <span class="cat-meter-val" id="catA11yVal">100%</span>
+          </div>
+          <div class="cat-meter-track">
+            <div class="cat-meter-bar" id="catA11yBar" style="width: 100%"></div>
+          </div>
+        </div>
+        <div class="cat-meter-item">
+          <div class="cat-meter-header">
+            <span class="cat-meter-label">Touch</span>
+            <span class="cat-meter-val" id="catTouchVal">100%</span>
+          </div>
+          <div class="cat-meter-track">
+            <div class="cat-meter-bar" id="catTouchBar" style="width: 100%"></div>
+          </div>
+        </div>
+        <div class="cat-meter-item">
+          <div class="cat-meter-header">
+            <span class="cat-meter-label">Typo</span>
+            <span class="cat-meter-val" id="catTypoVal">100%</span>
+          </div>
+          <div class="cat-meter-track">
+            <div class="cat-meter-bar" id="catTypoBar" style="width: 100%"></div>
+          </div>
+        </div>
+        <div class="cat-meter-item">
+          <div class="cat-meter-header">
+            <span class="cat-meter-label">Layout</span>
+            <span class="cat-meter-val" id="catLayoutVal">100%</span>
+          </div>
+          <div class="cat-meter-track">
+            <div class="cat-meter-bar" id="catLayoutBar" style="width: 100%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <main class="app-main">
+      <!-- Stage & Canvas Section -->
+      <section id="stage" class="workspace-stage">
+        <!-- Floating Glassmorphic Canvas Toolbar -->
+        <div id="stageToolbar" class="floating-toolbar" hidden>
+          <div class="view-switch-pill">
+            <button id="btnViewOrig" class="switch-opt active">Original</button>
+            <button id="btnViewApplied" class="switch-opt" disabled>Applied Preview</button>
+          </div>
+
+          <div class="toolbar-divider"></div>
+
+          <label class="minimal-toggle" title="Toggle visual issue markers on canvas">
+            <input id="toggleOverlays" type="checkbox" checked />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">Overlays</span>
+          </label>
+
+          <div class="toolbar-divider"></div>
+
+          <div class="zoom-group">
+            <button id="zoomOut" class="tool-btn" title="Zoom Out (Cmd -)">−</button>
+            <span id="zoomLevel" class="zoom-indicator">100%</span>
+            <button id="zoomIn" class="tool-btn" title="Zoom In (Cmd +)">+</button>
+            <button id="zoomReset" class="tool-btn" title="Reset (100%)">1:1</button>
+            <button id="zoomFit" class="tool-btn" title="Fit to viewport">Fit</button>
+          </div>
+        </div>
+
+        <div id="canvasWrap" class="canvas-wrapper">
+          <div id="canvas"></div>
+        </div>
+
+        <!-- Empty Drop State -->
+        <div id="dropHint" class="empty-dropzone">
+          <div class="drop-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <div class="drop-primary">Drop <code>*.capture.json</code> or convert a URL</div>
+          <div class="drop-secondary">Pick a sample from <b>Presets</b> or click <b>Load JSON</b> to start</div>
+        </div>
+
+        <!-- Floating Minimalist Node Inspector -->
+        <div id="nodeInspector" class="node-inspector-card" hidden>
+          <div class="inspector-header">
+            <div class="inspector-tag-box">
+              <span id="inspTag" class="insp-tag">DIV</span>
+              <span id="inspId" class="insp-id">e1</span>
+            </div>
+            <button id="closeInsp" class="icon-close-btn" title="Close inspector">✕</button>
+          </div>
+          <div id="inspCoords" class="insp-coords">864×96px @ (288, 135)</div>
+          <div id="inspStyles" class="insp-styles-grid"></div>
+          <div id="inspIssues" class="insp-issues-list"></div>
         </div>
       </section>
 
-      <aside id="side">
-        <div class="bar">
-          <strong>Suggestions</strong>
-          <span id="selCount"></span>
-          <span class="spacer"></span>
-          <button id="selAll" class="linkish">all</button>
-          <button id="selNone" class="linkish">none</button>
-        </div>
-        <ol id="suggList"></ol>
-        <div class="actions">
-          <button id="applyBtn" class="btn primary" disabled>Apply selected</button>
-          <a id="dlOps" class="btn" download="ops.json" hidden>ops.json</a>
-          <a id="dlApplied" class="btn" download="applied.capture.json" hidden>applied.capture.json</a>
+      <!-- Sidebar: Suggestions & Verify -->
+      <aside id="side" class="app-sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-title">
+            <span>Findings</span>
+            <span id="selCount" class="sel-count-tag">0/0</span>
+          </div>
+          <div class="bulk-actions">
+            <button id="selAll" class="text-btn">all</button>
+            <span class="divider">/</span>
+            <button id="selNone" class="text-btn">none</button>
+          </div>
         </div>
 
-        <div id="verifyPanel" hidden>
-          <h3>Figma verify</h3>
-          <p class="hint">
-            Compares the loaded (or applied) baseline against the live file via
-            api.figma.com — coverage ≥95%, ≤2px, colors ±3/255.
+        <!-- Filter & Search Bar -->
+        <div class="sidebar-filter-bar" id="filterBar" hidden>
+          <div class="search-wrap">
+            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input id="suggFilter" class="search-input" placeholder="Search rules, messages, tags..." />
+          </div>
+          <div class="filter-chips-row">
+            <button class="filter-chip active" data-sev="all">All</button>
+            <button class="filter-chip" data-sev="error">Errors</button>
+            <button class="filter-chip" data-sev="warn">Warn</button>
+            <button class="filter-chip" data-sev="info">Info</button>
+          </div>
+        </div>
+
+        <!-- Issues List -->
+        <ol id="suggList" class="suggestions-list"></ol>
+
+        <!-- Sidebar Action Footer -->
+        <div class="sidebar-footer">
+          <button id="applyBtn" class="btn btn-primary apply-action-btn" disabled>
+            <span>Apply Selected Fixes</span>
+          </button>
+          <div class="download-links">
+            <a id="dlOps" class="btn btn-ghost btn-sm" download="ops.json" hidden>ops.json</a>
+            <a id="dlApplied" class="btn btn-ghost btn-sm" download="applied.capture.json" hidden>applied.json</a>
+          </div>
+        </div>
+
+        <!-- Figma Verify Panel (Collapsible) -->
+        <div id="verifyPanel" class="verify-drawer" hidden>
+          <div class="drawer-header">
+            <h4>Figma REST Verification</h4>
+            <span class="status-indicator">Read-only</span>
+          </div>
+          <p class="drawer-hint">
+            Directly diffs loaded baseline against live Figma file (coverage ≥95%, ≤2px, colors ±3/255).
           </p>
-          <input id="tok" placeholder="FIGMA_TOKEN (figd_…)" type="password" autocomplete="off" />
-          <input id="fkey" placeholder="file key from the Figma file URL" autocomplete="off" />
-          <label class="chk"
-            ><input id="useApplied" type="checkbox" checked disabled /> compare against applied
-            baseline</label
-          >
-          <button id="runVerify" class="btn primary">Run verify</button>
-          <pre id="verifyOut" class="mono"></pre>
+          <input id="tok" class="drawer-input" placeholder="FIGMA_TOKEN (figd_...)" type="password" autocomplete="off" />
+          <input id="fkey" class="drawer-input" placeholder="Figma file key (from URL)" autocomplete="off" />
+          <label class="minimal-checkbox">
+            <input id="useApplied" type="checkbox" checked disabled />
+            <span>Compare against applied baseline</span>
+          </label>
+          <button id="runVerify" class="btn btn-primary btn-sm">Run Verification</button>
+          <pre id="verifyOut" class="verify-console"></pre>
         </div>
       </aside>
     </main>
+
+    <!-- Design Tokens Modal Dialog -->
+    <div id="tokensModal" class="modal-overlay" hidden>
+      <div class="modal-backdrop" id="tokensBackdrop"></div>
+      <div class="modal-container">
+        <div class="modal-header">
+          <div class="modal-title-box">
+            <h3>Design System Tokens</h3>
+            <span class="modal-subtitle">Extracted color palette, typography hierarchy, & rhythm scales</span>
+          </div>
+          <button id="closeTokensModal" class="modal-close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-tab-strip">
+            <button id="tabColors" class="modal-tab active">Colors</button>
+            <button id="tabTypo" class="modal-tab">Typography</button>
+            <button id="tabSpacing" class="modal-tab">Spacing</button>
+            <button id="tabCss" class="modal-tab">CSS Variables</button>
+            <button id="tabDtcg" class="modal-tab">DTCG JSON</button>
+          </div>
+          <div id="tokenTabBody" class="modal-tab-content"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="copyTokenCssBtn" class="btn btn-ghost btn-sm">Copy CSS</button>
+          <button id="copyTokenDtcgBtn" class="btn btn-ghost btn-sm">Copy DTCG JSON</button>
+          <span class="spacer"></span>
+          <button id="closeTokensFooter" class="btn btn-outline btn-sm">Close</button>
+        </div>
+      </div>
+    </div>
 
     <script src="./app.js"></script>
   </body>
