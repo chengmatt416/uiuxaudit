@@ -25,10 +25,15 @@ export function resolveChromiumBinary(): string {
     "/usr/bin/google-chrome",
     "/usr/bin/google-chrome-stable",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Arc.app/Contents/MacOS/Arc",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
     "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
     "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+    join(process.env["HOME"] ?? "", "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+    join(process.env["HOME"] ?? "", "Applications/Arc.app/Contents/MacOS/Arc"),
+    join(process.env["HOME"] ?? "", "Applications/Brave Browser.app/Contents/MacOS/Brave Browser"),
+    join(process.env["HOME"] ?? "", "Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
   ];
   for (const c of candidates) if (existsSync(c)) return c;
   for (const bin of ["chromium-browser", "chromium", "google-chrome", "google-chrome-stable"]) {

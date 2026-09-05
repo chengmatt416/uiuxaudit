@@ -19,6 +19,15 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+
+  win.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    console.error(`[Desktop] Failed to load ${url}: ${code} (${desc})`);
+  });
+
+  win.webContents.on("console-message", (_e, level, message, line, sourceId) => {
+    console.log(`[Renderer L${level}] ${message} (${sourceId}:${line})`);
+  });
+
   win.loadFile(path.join(__dirname, "web", "index.html"));
   return win;
 }

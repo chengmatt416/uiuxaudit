@@ -224,42 +224,46 @@ function updateScorecard(): void {
 }
 
 // ---------- loading ----------
+function loadDoc(parsed: CaptureDoc): void {
+  if (parsed?.version !== 1 || !Array.isArray(parsed.nodes)) {
+    throw new Error("not a uiuxaudit capture (version/nodes missing)");
+  }
+  doc = parsed;
+  appliedDoc = null;
+  viewMode = "orig";
+  btnViewOrig.classList.add("active");
+  btnViewApplied.classList.remove("active");
+  btnViewApplied.disabled = true;
+
+  useAppliedCb.checked = false;
+  useAppliedCb.disabled = true;
+  suggestions = suggestFor(doc);
+  auditScore = calculateAuditScore(doc, suggestions);
+  designTokens = extractTokens(doc);
+
+  checked.clear();
+  meta.textContent = `${doc.slug} · ${doc.url || "local"} · ${doc.nodes.length} nodes · ${doc.docWidth}×${doc.docHeight}`;
+  stage.classList.add("hasdoc");
+  stageToolbar.hidden = false;
+  filterBar.hidden = false;
+  verifyBtn.hidden = false;
+  tokensBtn.hidden = false;
+  reportBtn.hidden = false;
+  copyCssBtn.hidden = false;
+  copyOpsBtn.hidden = false;
+  dlOps.hidden = true;
+  dlApplied.hidden = true;
+
+  updateScorecard();
+  applyZoom();
+  renderCanvas();
+  renderSuggestions();
+}
+
 async function loadFile(file: File): Promise<void> {
   try {
     const parsed = JSON.parse(await file.text()) as CaptureDoc;
-    if (parsed?.version !== 1 || !Array.isArray(parsed.nodes)) {
-      throw new Error("not a uiuxaudit capture (version/nodes missing)");
-    }
-    doc = parsed;
-    appliedDoc = null;
-    viewMode = "orig";
-    btnViewOrig.classList.add("active");
-    btnViewApplied.classList.remove("active");
-    btnViewApplied.disabled = true;
-
-    useAppliedCb.checked = false;
-    useAppliedCb.disabled = true;
-    suggestions = suggestFor(doc);
-    auditScore = calculateAuditScore(doc, suggestions);
-    designTokens = extractTokens(doc);
-
-    checked.clear();
-    meta.textContent = `${doc.slug} · ${doc.url || "local"} · ${doc.nodes.length} nodes · ${doc.docWidth}×${doc.docHeight}`;
-    stage.classList.add("hasdoc");
-    stageToolbar.hidden = false;
-    filterBar.hidden = false;
-    verifyBtn.hidden = false;
-    tokensBtn.hidden = false;
-    reportBtn.hidden = false;
-    copyCssBtn.hidden = false;
-    copyOpsBtn.hidden = false;
-    dlOps.hidden = true;
-    dlApplied.hidden = true;
-
-    updateScorecard();
-    applyZoom();
-    renderCanvas();
-    renderSuggestions();
+    loadDoc(parsed);
   } catch (e) {
     toast(e instanceof Error ? e.message : String(e));
   }
@@ -352,12 +356,12 @@ const PRESETS: Record<string, Partial<CaptureDoc>> = {
   },
 };
 
-presetSelect.addEventListener("change", () => {
-  const chosen = PRESETS[presetSelect.value];
+function loadPreset(key: string): void {
+  const chosen = PRESETS[key];
   if (!chosen) return;
   const completeDoc: CaptureDoc = {
     version: 1,
-    slug: chosen.slug ?? "preset",
+    slug: chosen.slug ?? key,
     url: chosen.url ?? "https://example.com",
     title: chosen.title ?? "Preset",
     viewportWidth: chosen.viewportWidth ?? 1440,
@@ -368,17 +372,25 @@ presetSelect.addEventListener("change", () => {
     nodes: (chosen.nodes ?? []) as CaptureNode[],
     capturedAt: new Date().toISOString(),
   };
-  void loadFile(
-    new File([JSON.stringify(completeDoc)], `${completeDoc.slug}.capture.json`, {
-      type: "application/json",
-    }),
-  );
+  loadDoc(completeDoc);
+}
+
+presetSelect.addEventListener("change", () => {
+  if (presetSelect.value) loadPreset(presetSelect.value);
+});
+
+document.querySelectorAll<HTMLButtonElement>(".preset-card-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const key = btn.dataset["preset"];
+    if (key) loadPreset(key);
+  });
 });
 
 // ---------- zoom & pan controls ----------
 function applyZoom(): void {
   if (!doc) return;
-  const fitScale = Math.min(1, (stage.clientWidth - 32) / doc.docWidth);
+  const availableWidth = Math.max(stage.clientWidth - 48, 240);
+  const fitScale = Math.max(0.1, Math.min(1.0, availableWidth / doc.docWidth));
   const effective = fitScale * zoomFactor;
   wrap.style.transform = `scale(${effective})`;
   wrap.style.width = doc.docWidth + "px";
@@ -895,7 +907,13 @@ runVerifyBtn.addEventListener("click", async () => {
 // Scripted hook used by headless UI smoke tests and the desktop shell.
 (window as unknown as Record<string, unknown>)["__ua"] = {
   loadJSON(text: string): Promise<void> {
-    return loadFile(new File([text], "smoke.capture.json", { type: "application/json" }));
+    try {
+      const parsed = JSON.parse(text) as CaptureDoc;
+      loadDoc(parsed);
+      return Promise.resolve();
+    } catch (e) {
+      return Promise.reject(e);
+    }
   },
 };
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
@@ -941,6 +959,9 @@ if (extRuntime?.id && typeof extRuntime.sendMessage === "function") {
 // ---------- URL conversion: desktop bridge or local GUI server ----------
 const convUrlInput = $<HTMLInputElement>("convUrl");
 const convBtn = $<HTMLButtonElement>("convBtn");
+const convertingOverlay = $("convertingOverlay");
+const loaderTitle = $("loaderTitle");
+const loaderSub = $("loaderSub");
 
 if (uaDesktop) {
   void uaDesktop.chromiumPath?.().then((r) => {
@@ -949,26 +970,32 @@ if (uaDesktop) {
 }
 
 const runConvert = async () => {
-  const url = convUrlInput.value.trim();
-  if (!/^https?:\/\//i.test(url)) {
-    toast("Please enter a valid http(s) URL");
+  let url = convUrlInput.value.trim();
+  if (!url) {
+    toast("Please enter a website URL (e.g. example.com)");
+    convUrlInput.focus();
     return;
   }
+  if (!/^https?:\/\//i.test(url)) {
+    url = "https://" + url;
+    convUrlInput.value = url;
+  }
+
   convBtn.disabled = true;
   const btnText = convBtn.querySelector<HTMLElement>(".btn-text");
   const origText = btnText ? btnText.textContent : convBtn.textContent;
   if (btnText) btnText.textContent = "Capturing…";
   else convBtn.textContent = "Capturing…";
 
+  convertingOverlay.hidden = false;
+  loaderTitle.textContent = `Capturing ${url}…`;
+  loaderSub.textContent = "Launching headless Chromium & extracting 1:1 design tree";
+
   try {
     if (uaDesktop) {
       const r = await uaDesktop.convert({ url });
       if (!r.ok || !r.doc) throw new Error(r.error ?? "Desktop capture failed");
-      await loadFile(
-        new File([JSON.stringify(r.doc)], (r.doc.slug || "page") + ".capture.json", {
-          type: "application/json",
-        }),
-      );
+      loadDoc(r.doc);
       toast(`Captured ${url} successfully!`);
     } else {
       const res = await fetch("/api/convert", {
@@ -979,13 +1006,13 @@ const runConvert = async () => {
 
       if (!res) {
         throw new Error(
-          "Direct URL conversion requires local GUI server. Run 'npx uiuxaudit gui' or use desktop app.",
+          "Direct URL conversion requires local GUI server. Run 'npm run gui' or use desktop app.",
         );
       }
       if (!res.ok) {
         if (res.status === 404) {
           throw new Error(
-            "Direct URL conversion requires local GUI server. Run 'npx uiuxaudit gui' or use desktop app.",
+            "Direct URL conversion requires local GUI server. Run 'npm run gui' or use desktop app.",
           );
         }
         const errData = (await res.json().catch(() => ({}))) as { error?: string };
@@ -993,16 +1020,13 @@ const runConvert = async () => {
       }
       const data = (await res.json()) as { ok: boolean; doc?: CaptureDoc; error?: string };
       if (!data.ok || !data.doc) throw new Error(data.error ?? "Invalid capture response");
-      await loadFile(
-        new File([JSON.stringify(data.doc)], (data.doc.slug || "page") + ".capture.json", {
-          type: "application/json",
-        }),
-      );
+      loadDoc(data.doc);
       toast(`Captured ${url} successfully!`);
     }
   } catch (err) {
     toast(err instanceof Error ? err.message : String(err));
   } finally {
+    convertingOverlay.hidden = true;
     convBtn.disabled = false;
     if (btnText) btnText.textContent = origText;
     else convBtn.textContent = origText;
@@ -1013,3 +1037,8 @@ convBtn.addEventListener("click", () => void runConvert());
 convUrlInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") void runConvert();
 });
+
+// Auto-load default SaaS preset on startup if no document is loaded
+if (!doc) {
+  loadPreset("saas");
+}

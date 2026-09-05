@@ -616,6 +616,87 @@ html, body {
   display: none;
 }
 
+.preset-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+  max-width: 580px;
+  margin: 10px 0 6px 0;
+}
+.preset-card-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--duration-fast) var(--ease-smooth);
+}
+.preset-card-btn:hover {
+  border-color: var(--accent-cyan);
+  background: var(--bg-surface-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.pcard-icon {
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+.pcard-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg-primary);
+  margin-bottom: 2px;
+}
+.pcard-desc {
+  font-size: 11px;
+  color: var(--fg-tertiary);
+  line-height: 1.3;
+}
+
+/* Converting overlay */
+.converting-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 8, 10, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 80;
+  gap: 12px;
+  animation: fadeIn 0.2s ease-out;
+}
+.converting-overlay[hidden] {
+  display: none !important;
+}
+.loader-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.loader-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg-primary);
+}
+.loader-sub {
+  font-size: 12px;
+  color: var(--fg-tertiary);
+}
+
 /* Canvas Rendered Elements */
 .node {
   position: absolute;

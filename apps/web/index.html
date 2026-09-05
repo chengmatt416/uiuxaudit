@@ -164,8 +164,38 @@
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
           </div>
-          <div class="drop-primary">Drop <code>*.capture.json</code> or convert a URL</div>
-          <div class="drop-secondary">Pick a sample from <b>Presets</b> or click <b>Load JSON</b> to start</div>
+          <div class="drop-primary">Enter a URL to audit or start with a sample project</div>
+          <div class="preset-cards-grid">
+            <button class="preset-card-btn" data-preset="saas">
+              <div class="pcard-icon">⚡</div>
+              <div class="pcard-info">
+                <div class="pcard-title">SaaS Dashboard</div>
+                <div class="pcard-desc">Dark theme metrics & charts</div>
+              </div>
+            </button>
+            <button class="preset-card-btn" data-preset="example">
+              <div class="pcard-icon">🌐</div>
+              <div class="pcard-info">
+                <div class="pcard-title">Example Domain</div>
+                <div class="pcard-desc">Standard HTML hierarchy</div>
+              </div>
+            </button>
+            <button class="preset-card-btn" data-preset="mobile">
+              <div class="pcard-icon">📱</div>
+              <div class="pcard-info">
+                <div class="pcard-title">Mobile Flow</div>
+                <div class="pcard-desc">Touch targets & checkout</div>
+              </div>
+            </button>
+          </div>
+          <div class="drop-secondary">Or drag & drop any <code>*.capture.json</code> file here</div>
+        </div>
+
+        <!-- Converting / Loading Progress Overlay -->
+        <div id="convertingOverlay" class="converting-overlay" hidden>
+          <div class="loader-spinner"></div>
+          <div class="loader-title" id="loaderTitle">Capturing page…</div>
+          <div class="loader-sub" id="loaderSub">Running headless Chromium & extracting 1:1 design tree</div>
         </div>
 
         <!-- Floating Minimalist Node Inspector -->
