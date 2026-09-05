@@ -117,6 +117,8 @@ const filterChips = document.querySelectorAll<HTMLButtonElement>(".filter-chips-
 
 // Tokens Modal elements
 const tokensModal = $("tokensModal");
+tokensModal.hidden = true;
+tokensModal.style.display = "none";
 const tokensBackdrop = $("tokensBackdrop");
 const closeTokensModal = $<HTMLButtonElement>("closeTokensModal");
 const closeTokensFooter = $<HTMLButtonElement>("closeTokensFooter");
@@ -773,10 +775,14 @@ copyOpsBtn.addEventListener("click", () => {
 tokensBtn.addEventListener("click", () => {
   if (!designTokens) return;
   tokensModal.hidden = false;
+  tokensModal.style.display = "flex";
   renderTokenTab();
 });
 
-const closeTokens = () => { tokensModal.hidden = true; };
+const closeTokens = () => {
+  tokensModal.hidden = true;
+  tokensModal.style.display = "none";
+};
 closeTokensModal.addEventListener("click", closeTokens);
 closeTokensFooter.addEventListener("click", closeTokens);
 tokensBackdrop.addEventListener("click", closeTokens);

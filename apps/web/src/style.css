@@ -44,6 +44,10 @@
   padding: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html, body {
   height: 100%;
   background: var(--bg-core);
@@ -299,6 +303,9 @@ html, body {
   flex-shrink: 0;
   animation: ribbonSlide 0.3s var(--ease-spring);
 }
+.scorecard-ribbon[hidden] {
+  display: none !important;
+}
 @keyframes ribbonSlide {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
@@ -445,6 +452,9 @@ html, body {
   border-radius: 30px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
   animation: toolbarPop 0.35s var(--ease-spring);
+}
+.floating-toolbar[hidden] {
+  display: none !important;
 }
 @keyframes toolbarPop {
   0% { transform: scale(0.92) translateY(-8px); opacity: 0; }
@@ -795,6 +805,9 @@ html, body {
   z-index: 40;
   animation: inspectorIn 0.25s var(--ease-spring);
 }
+.node-inspector-card[hidden] {
+  display: none !important;
+}
 @keyframes inspectorIn {
   from { opacity: 0; transform: translateY(12px) scale(0.95); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -923,6 +936,9 @@ html, body {
   flex-direction: column;
   gap: 6px;
   flex-shrink: 0;
+}
+.sidebar-filter-bar[hidden] {
+  display: none !important;
 }
 .search-wrap {
   position: relative;
@@ -1064,6 +1080,9 @@ html, body {
   gap: 8px;
   background: var(--bg-core);
 }
+.verify-drawer[hidden] {
+  display: none !important;
+}
 .drawer-header {
   display: flex;
   align-items: center;
@@ -1114,6 +1133,9 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.modal-overlay[hidden] {
+  display: none !important;
 }
 .modal-backdrop {
   position: absolute;
