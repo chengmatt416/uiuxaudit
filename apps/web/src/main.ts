@@ -22,6 +22,8 @@ import type {
 
 // ---------- desktop (Electron) mode: full pipeline via IPC ----------
 interface DesktopBridge {
+  isDesktop?: boolean;
+  platform?: string;
   convert(opts: {
     url: string;
     name?: string;
@@ -37,6 +39,13 @@ interface DesktopBridge {
   chromiumPath(): Promise<{ ok: boolean; path?: string; error?: string }>;
 }
 const uaDesktop = (globalThis as { uaDesktop?: DesktopBridge }).uaDesktop;
+
+if (uaDesktop?.isDesktop) {
+  document.body.classList.add("is-desktop");
+  if (uaDesktop.platform === "darwin") {
+    document.body.classList.add("is-mac");
+  }
+}
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -69,11 +78,21 @@ const useAppliedCb = $<HTMLInputElement>("useApplied");
 const runVerifyBtn = $<HTMLButtonElement>("runVerify");
 const verifyOut = $("verifyOut");
 
-// New toolbar & action elements
+// Header actions & dropdowns
 const tokensBtn = $<HTMLButtonElement>("tokensBtn");
 const reportBtn = $<HTMLButtonElement>("reportBtn");
-const copyCssBtn = $<HTMLButtonElement>("copyCssBtn");
+const exportDropdownWrap = $("exportDropdownWrap");
+const exportMenuBtn = $<HTMLButtonElement>("exportMenuBtn");
+const exportMenu = $("exportMenu");
 const copyOpsBtn = $<HTMLButtonElement>("copyOpsBtn");
+const copyCssBtn = $<HTMLButtonElement>("copyCssBtn");
+const downloadDtcgBtn = $<HTMLButtonElement>("downloadDtcgBtn");
+const downloadTokenCssBtn = $<HTMLButtonElement>("downloadTokenCssBtn");
+const downloadReportHtmlBtn = $<HTMLButtonElement>("downloadReportHtmlBtn");
+const downloadAppliedDocBtn = $<HTMLButtonElement>("downloadAppliedDocBtn");
+const shortcutsBtn = $<HTMLButtonElement>("shortcutsBtn");
+
+// Scorecard elements
 const scorecardBar = $("scorecardBar");
 const scoreGauge = $("scoreGauge");
 const healthScoreNum = $("healthScoreNum");
@@ -94,8 +113,10 @@ const catTypoBar = $("catTypoBar");
 const catLayoutVal = $("catLayoutVal");
 const catLayoutBar = $("catLayoutBar");
 
+// Toolbar controls
 const btnViewOrig = $<HTMLButtonElement>("btnViewOrig");
 const btnViewApplied = $<HTMLButtonElement>("btnViewApplied");
+const btnViewSplit = $<HTMLButtonElement>("btnViewSplit");
 const toggleOverlays = $<HTMLInputElement>("toggleOverlays");
 const zoomOut = $<HTMLButtonElement>("zoomOut");
 const zoomIn = $<HTMLButtonElement>("zoomIn");
@@ -103,19 +124,24 @@ const zoomReset = $<HTMLButtonElement>("zoomReset");
 const zoomFit = $<HTMLButtonElement>("zoomFit");
 const zoomLevel = $("zoomLevel");
 
+// Inspector
 const nodeInspector = $("nodeInspector");
 const inspTag = $("inspTag");
 const inspId = $("inspId");
 const inspCoords = $("inspCoords");
+const inspContrast = $("inspContrast");
 const inspStyles = $("inspStyles");
 const inspIssues = $("inspIssues");
 const closeInsp = $<HTMLButtonElement>("closeInsp");
+const copyNodeCssBtn = $<HTMLButtonElement>("copyNodeCssBtn");
+const copyNodeTwBtn = $<HTMLButtonElement>("copyNodeTwBtn");
 
+// Filter
 const filterBar = $("filterBar");
 const suggFilter = $<HTMLInputElement>("suggFilter");
 const filterChips = document.querySelectorAll<HTMLButtonElement>(".filter-chips-row .filter-chip");
 
-// Tokens Modal elements
+// Tokens Modal
 const tokensModal = $("tokensModal");
 tokensModal.hidden = true;
 tokensModal.style.display = "none";
@@ -131,15 +157,24 @@ const tabSpacing = $<HTMLButtonElement>("tabSpacing");
 const tabCss = $<HTMLButtonElement>("tabCss");
 const tabDtcg = $<HTMLButtonElement>("tabDtcg");
 
+// Shortcuts Modal
+const shortcutsModal = $("shortcutsModal");
+shortcutsModal.hidden = true;
+shortcutsModal.style.display = "none";
+const shortcutsBackdrop = $("shortcutsBackdrop");
+const closeShortcutsModal = $<HTMLButtonElement>("closeShortcutsModal");
+const closeShortcutsFooter = $<HTMLButtonElement>("closeShortcutsFooter");
+
 // State
 let doc: CaptureDoc | null = null;
 let appliedDoc: CaptureDoc | null = null;
 let suggestions: Suggestion[] = [];
 let auditScore: AuditScore | null = null;
 let designTokens: DesignTokens | null = null;
+let selectedNode: CaptureNode | null = null;
 const checked = new Set<string>();
 
-let viewMode: "orig" | "applied" = "orig";
+let viewMode: "orig" | "applied" | "split" = "orig";
 let showOverlays = true;
 let zoomFactor = 1.0;
 let filterQuery = "";
@@ -180,6 +215,49 @@ function cssColor(c: { r: number; g: number; b: number; a: number }): string {
   return c.a >= 1
     ? "#" + h(c.r) + h(c.g) + h(c.b)
     : `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${c.a})`;
+}
+
+function getContrastRatio(fg: { r: number; g: number; b: number }, bg: { r: number; g: number; b: number }): number {
+  const lum = (c: { r: number; g: number; b: number }) => {
+    const a = [c.r, c.g, c.b].map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+    return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+  };
+  const l1 = lum(fg);
+  const l2 = lum(bg);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+
+function generateNodeCss(n: CaptureNode): string {
+  const lines: string[] = [
+    `/* <${n.tag.toLowerCase()}> #${n.id} */`,
+    `width: ${Math.round(n.w)}px;`,
+    `height: ${Math.round(n.h)}px;`,
+  ];
+  if (n.textColor) lines.push(`color: ${cssColor(n.textColor)};`);
+  if (n.bgColor && n.bgColor.a > 0) lines.push(`background-color: ${cssColor(n.bgColor)};`);
+  if (n.fontSize) lines.push(`font-size: ${n.fontSize}px;`);
+  if (n.fontWeight) lines.push(`font-weight: ${n.fontWeight};`);
+  if (n.lineHeight) lines.push(`line-height: ${n.lineHeight}px;`);
+  if (n.radii && n.radii.some((r) => r > 0)) {
+    lines.push(`border-radius: ${n.radii.map((r) => r + "px").join(" ")};`);
+  }
+  if (n.border && n.border.width > 0) {
+    lines.push(`border: ${n.border.width}px solid ${cssColor(n.border.color)};`);
+  }
+  return lines.join("\n");
+}
+
+function generateNodeTailwind(n: CaptureNode): string {
+  const tw: string[] = [];
+  tw.push(`w-[${Math.round(n.w)}px]`, `h-[${Math.round(n.h)}px]`);
+  if (n.textColor) tw.push(`text-[${cssColor(n.textColor)}]`);
+  if (n.bgColor && n.bgColor.a > 0) tw.push(`bg-[${cssColor(n.bgColor)}]`);
+  if (n.fontSize) tw.push(`text-[${n.fontSize}px]`);
+  if (n.fontWeight && n.fontWeight >= 700) tw.push(`font-bold`);
+  else if (n.fontWeight && n.fontWeight >= 600) tw.push(`font-semibold`);
+  else if (n.fontWeight && n.fontWeight >= 500) tw.push(`font-medium`);
+  if (n.radii && n.radii[0] > 0) tw.push(`rounded-[${n.radii[0]}px]`);
+  return tw.join(" ");
 }
 
 // ---------- scorecard ----------
@@ -232,6 +310,8 @@ function loadDoc(parsed: CaptureDoc): void {
   }
   doc = parsed;
   appliedDoc = null;
+  selectedNode = null;
+  nodeInspector.hidden = true;
   viewMode = "orig";
   btnViewOrig.classList.add("active");
   btnViewApplied.classList.remove("active");
@@ -251,8 +331,12 @@ function loadDoc(parsed: CaptureDoc): void {
   verifyBtn.hidden = false;
   tokensBtn.hidden = false;
   reportBtn.hidden = false;
-  copyCssBtn.hidden = false;
-  copyOpsBtn.hidden = false;
+  exportDropdownWrap.hidden = false;
+  btnViewSplit.disabled = false;
+  viewMode = "orig";
+  btnViewOrig.classList.add("active");
+  btnViewApplied.classList.remove("active");
+  btnViewSplit.classList.remove("active");
   dlOps.hidden = true;
   dlApplied.hidden = true;
 
@@ -356,6 +440,62 @@ const PRESETS: Record<string, Partial<CaptureDoc>> = {
       { id: "m8", tag: "#text", kind: "text", x: 140, y: 755, w: 110, h: 22, text: "Confirm Send", fontSize: 16, fontWeight: 700, textColor: { r: 0.05, g: 0.08, b: 0.12, a: 1 }, effectiveBg: { r: 0.3, g: 0.64, b: 1, a: 1 }, parent: "m7", order: 7 },
     ],
   },
+  ecommerce: {
+    slug: "ecommerce",
+    url: "https://lumina-studio.design/store/chrono-noir",
+    title: "Lumina Minimalist Luxury Store",
+    viewportWidth: 1440,
+    viewportHeight: 900,
+    docWidth: 1440,
+    docHeight: 900,
+    rootBg: { r: 0.04, g: 0.05, b: 0.07, a: 1 },
+    nodes: [
+      { id: "ec1", tag: "NAV", kind: "frame", x: 0, y: 0, w: 1440, h: 64, parent: null, bgColor: { r: 0.07, g: 0.08, b: 0.11, a: 1 }, effectiveBg: { r: 0.07, g: 0.08, b: 0.11, a: 1 }, order: 0 },
+      { id: "ec2", tag: "#text", kind: "text", x: 48, y: 22, w: 160, h: 22, text: "LUMINA ATELIER", fontSize: 16, fontWeight: 700, textColor: { r: 0.95, g: 0.95, b: 0.95, a: 1 }, effectiveBg: { r: 0.07, g: 0.08, b: 0.11, a: 1 }, parent: "ec1", order: 1 },
+      { id: "ec3", tag: "BUTTON", kind: "frame", x: 1300, y: 18, w: 90, h: 30, interactive: true, radii: [6,6,6,6], bgColor: { r: 0.15, g: 0.18, b: 0.24, a: 1 }, effectiveBg: { r: 0.15, g: 0.18, b: 0.24, a: 1 }, parent: "ec1", order: 2 },
+      { id: "ec4", tag: "#text", kind: "text", x: 1318, y: 24, w: 56, h: 18, text: "Cart (2)", fontSize: 13, fontWeight: 600, textColor: { r: 0.85, g: 0.9, b: 1, a: 1 }, effectiveBg: { r: 0.15, g: 0.18, b: 0.24, a: 1 }, parent: "ec3", order: 3 },
+      { id: "ec5", tag: "DIV", kind: "frame", x: 120, y: 130, w: 480, h: 480, parent: null, bgColor: { r: 0.09, g: 0.11, b: 0.15, a: 1 }, effectiveBg: { r: 0.09, g: 0.11, b: 0.15, a: 1 }, radii: [16,16,16,16], order: 4 },
+      { id: "ec6", tag: "#text", kind: "text", x: 650, y: 150, w: 120, h: 16, text: "NEW ARRIVAL", fontSize: 11, fontWeight: 700, textColor: { r: 0.22, g: 0.74, b: 0.97, a: 1 }, effectiveBg: { r: 0.04, g: 0.05, b: 0.07, a: 1 }, parent: null, order: 5 },
+      { id: "ec7", tag: "#text", kind: "text", x: 650, y: 180, w: 420, h: 40, text: "Chrono Noir Automatique", fontSize: 32, fontWeight: 800, textColor: { r: 0.98, g: 0.98, b: 0.98, a: 1 }, effectiveBg: { r: 0.04, g: 0.05, b: 0.07, a: 1 }, parent: null, order: 6 },
+      { id: "ec8", tag: "#text", kind: "text", x: 650, y: 236, w: 140, h: 28, text: "$480.00", fontSize: 24, fontWeight: 700, textColor: { r: 0.8, g: 0.85, b: 0.95, a: 1 }, effectiveBg: { r: 0.04, g: 0.05, b: 0.07, a: 1 }, parent: null, order: 7 },
+      { id: "ec9", tag: "#text", kind: "text", x: 650, y: 280, w: 480, h: 42, text: "Machined from aerospace-grade titanium with an anti-reflective sapphire crystal face and 48-hour mechanical reserve.", fontSize: 14, fontWeight: 400, textColor: { r: 0.44, g: 0.47, b: 0.52, a: 1 }, effectiveBg: { r: 0.04, g: 0.05, b: 0.07, a: 1 }, parent: null, order: 8 },
+      { id: "ec10", tag: "BUTTON", kind: "frame", x: 650, y: 350, w: 18, h: 18, interactive: true, radii: [4,4,4,4], bgColor: { r: 0.16, g: 0.19, b: 0.25, a: 1 }, effectiveBg: { r: 0.16, g: 0.19, b: 0.25, a: 1 }, parent: null, order: 9 },
+      { id: "ec11", tag: "#text", kind: "text", x: 655, y: 351, w: 10, h: 16, text: "−", fontSize: 13, fontWeight: 600, textColor: { r: 0.9, g: 0.9, b: 0.9, a: 1 }, effectiveBg: { r: 0.16, g: 0.19, b: 0.25, a: 1 }, parent: "ec10", order: 10 },
+      { id: "ec12", tag: "BUTTON", kind: "frame", x: 690, y: 350, w: 18, h: 18, interactive: true, radii: [4,4,4,4], bgColor: { r: 0.16, g: 0.19, b: 0.25, a: 1 }, effectiveBg: { r: 0.16, g: 0.19, b: 0.25, a: 1 }, parent: null, order: 11 },
+      { id: "ec13", tag: "#text", kind: "text", x: 695, y: 351, w: 10, h: 16, text: "+", fontSize: 13, fontWeight: 600, textColor: { r: 0.9, g: 0.9, b: 0.9, a: 1 }, effectiveBg: { r: 0.16, g: 0.19, b: 0.25, a: 1 }, parent: "ec12", order: 12 },
+      { id: "ec14", tag: "BUTTON", kind: "frame", x: 650, y: 410, w: 260, h: 48, interactive: true, radii: [10,10,10,10], bgColor: { r: 0.22, g: 0.74, b: 0.97, a: 1 }, effectiveBg: { r: 0.22, g: 0.74, b: 0.97, a: 1 }, parent: null, order: 13 },
+      { id: "ec15", tag: "#text", kind: "text", x: 720, y: 424, w: 120, h: 20, text: "Add to Bag", fontSize: 15, fontWeight: 700, textColor: { r: 0.02, g: 0.08, b: 0.14, a: 1 }, effectiveBg: { r: 0.22, g: 0.74, b: 0.97, a: 1 }, parent: "ec14", order: 14 },
+    ],
+  },
+  pricing: {
+    slug: "pricing",
+    url: "https://apexcloud.dev/pricing",
+    title: "Apex Cloud Pricing Matrix",
+    viewportWidth: 1440,
+    viewportHeight: 900,
+    docWidth: 1440,
+    docHeight: 900,
+    rootBg: { r: 0.05, g: 0.06, b: 0.08, a: 1 },
+    nodes: [
+      { id: "p1", tag: "#text", kind: "text", x: 440, y: 80, w: 560, h: 42, text: "Predictable, Scalable Pricing", fontSize: 34, fontWeight: 800, textAlign: "CENTER", textColor: { r: 1, g: 1, b: 1, a: 1 }, effectiveBg: { r: 0.05, g: 0.06, b: 0.08, a: 1 }, parent: null, order: 0 },
+      { id: "p2", tag: "#text", kind: "text", x: 470, y: 132, w: 500, h: 24, text: "Transparent plans with zero ingress fees and guaranteed 99.99% uptime SLA.", fontSize: 14, fontWeight: 400, textAlign: "CENTER", textColor: { r: 0.45, g: 0.48, b: 0.53, a: 1 }, effectiveBg: { r: 0.05, g: 0.06, b: 0.08, a: 1 }, parent: null, order: 1 },
+      { id: "p3", tag: "DIV", kind: "frame", x: 160, y: 210, w: 340, h: 420, parent: null, bgColor: { r: 0.09, g: 0.11, b: 0.14, a: 1 }, effectiveBg: { r: 0.09, g: 0.11, b: 0.14, a: 1 }, radii: [12,12,12,12], order: 2 },
+      { id: "p4", tag: "#text", kind: "text", x: 190, y: 240, w: 100, h: 22, text: "Starter", fontSize: 18, fontWeight: 700, textColor: { r: 0.9, g: 0.93, b: 0.98, a: 1 }, effectiveBg: { r: 0.09, g: 0.11, b: 0.14, a: 1 }, parent: "p3", order: 3 },
+      { id: "p5", tag: "#text", kind: "text", x: 190, y: 270, w: 80, h: 36, text: "$0", fontSize: 32, fontWeight: 800, textColor: { r: 1, g: 1, b: 1, a: 1 }, effectiveBg: { r: 0.09, g: 0.11, b: 0.14, a: 1 }, parent: "p3", order: 4 },
+      { id: "p6", tag: "BUTTON", kind: "frame", x: 190, y: 550, w: 280, h: 42, interactive: true, radii: [8,8,8,8], bgColor: { r: 0.18, g: 0.22, b: 0.28, a: 1 }, effectiveBg: { r: 0.18, g: 0.22, b: 0.28, a: 1 }, parent: "p3", order: 5 },
+      { id: "p7", tag: "#text", kind: "text", x: 275, y: 562, w: 110, h: 18, text: "Deploy Free", fontSize: 14, fontWeight: 600, textColor: { r: 0.9, g: 0.94, b: 1, a: 1 }, effectiveBg: { r: 0.18, g: 0.22, b: 0.28, a: 1 }, parent: "p6", order: 6 },
+      { id: "p8", tag: "DIV", kind: "frame", x: 550, y: 190, w: 340, h: 460, parent: null, bgColor: { r: 0.11, g: 0.14, b: 0.2, a: 1 }, effectiveBg: { r: 0.11, g: 0.14, b: 0.2, a: 1 }, radii: [12,12,12,12], order: 7 },
+      { id: "p9", tag: "#text", kind: "text", x: 580, y: 220, w: 120, h: 22, text: "Professional", fontSize: 18, fontWeight: 700, textColor: { r: 0.35, g: 0.75, b: 1, a: 1 }, effectiveBg: { r: 0.11, g: 0.14, b: 0.2, a: 1 }, parent: "p8", order: 8 },
+      { id: "p10", tag: "#text", kind: "text", x: 580, y: 250, w: 120, h: 36, text: "$49/mo", fontSize: 32, fontWeight: 800, textColor: { r: 1, g: 1, b: 1, a: 1 }, effectiveBg: { r: 0.11, g: 0.14, b: 0.2, a: 1 }, parent: "p8", order: 9 },
+      { id: "p11", tag: "BUTTON", kind: "frame", x: 580, y: 570, w: 280, h: 44, interactive: true, radii: [8,8,8,8], bgColor: { r: 0.22, g: 0.74, b: 0.97, a: 1 }, effectiveBg: { r: 0.22, g: 0.74, b: 0.97, a: 1 }, parent: "p8", order: 10 },
+      { id: "p12", tag: "#text", kind: "text", x: 650, y: 583, w: 140, h: 18, text: "Start 14-Day Trial", fontSize: 14, fontWeight: 700, textColor: { r: 0.02, g: 0.08, b: 0.14, a: 1 }, effectiveBg: { r: 0.22, g: 0.74, b: 0.97, a: 1 }, parent: "p11", order: 11 },
+      { id: "p13", tag: "DIV", kind: "frame", x: 940, y: 210, w: 340, h: 420, parent: null, bgColor: { r: 0.09, g: 0.11, b: 0.14, a: 1 }, effectiveBg: { r: 0.09, g: 0.11, b: 0.14, a: 1 }, radii: [12,12,12,12], order: 12 },
+      { id: "p14", tag: "#text", kind: "text", x: 970, y: 240, w: 100, h: 22, text: "Enterprise", fontSize: 18, fontWeight: 700, textColor: { r: 0.9, g: 0.93, b: 0.98, a: 1 }, effectiveBg: { r: 0.09, g: 0.11, b: 0.14, a: 1 }, parent: "p13", order: 13 },
+      { id: "p15", tag: "#text", kind: "text", x: 970, y: 270, w: 140, h: 36, text: "$199/mo", fontSize: 32, fontWeight: 800, textColor: { r: 1, g: 1, b: 1, a: 1 }, effectiveBg: { r: 0.09, g: 0.11, b: 0.14, a: 1 }, parent: "p13", order: 14 },
+      { id: "p16", tag: "BUTTON", kind: "frame", x: 970, y: 550, w: 280, h: 42, interactive: true, radii: [8,8,8,8], bgColor: { r: 0.18, g: 0.22, b: 0.28, a: 1 }, effectiveBg: { r: 0.18, g: 0.22, b: 0.28, a: 1 }, parent: "p13", order: 15 },
+      { id: "p17", tag: "#text", kind: "text", x: 1055, y: 562, w: 110, h: 18, text: "Contact Sales", fontSize: 14, fontWeight: 600, textColor: { r: 0.9, g: 0.94, b: 1, a: 1 }, effectiveBg: { r: 0.18, g: 0.22, b: 0.28, a: 1 }, parent: "p16", order: 16 },
+    ],
+  },
 };
 
 function loadPreset(key: string): void {
@@ -391,12 +531,11 @@ document.querySelectorAll<HTMLButtonElement>(".preset-card-btn").forEach((btn) =
 // ---------- zoom & pan controls ----------
 function applyZoom(): void {
   if (!doc) return;
+  const targetWidth = viewMode === "split" ? (doc.docWidth * 2 + 48) : doc.docWidth;
   const availableWidth = Math.max(stage.clientWidth - 48, 240);
-  const fitScale = Math.max(0.1, Math.min(1.0, availableWidth / doc.docWidth));
+  const fitScale = Math.max(0.08, Math.min(1.0, availableWidth / targetWidth));
   const effective = fitScale * zoomFactor;
   wrap.style.transform = `scale(${effective})`;
-  wrap.style.width = doc.docWidth + "px";
-  wrap.style.height = doc.docHeight + "px";
   zoomLevel.textContent = `${Math.round(effective * 100)}%`;
 }
 
@@ -405,7 +544,7 @@ zoomIn.addEventListener("click", () => {
   applyZoom();
 });
 zoomOut.addEventListener("click", () => {
-  zoomFactor = Math.max(0.3, zoomFactor / 1.25);
+  zoomFactor = Math.max(0.2, zoomFactor / 1.25);
   applyZoom();
 });
 zoomReset.addEventListener("click", () => {
@@ -422,6 +561,8 @@ btnViewOrig.addEventListener("click", () => {
   viewMode = "orig";
   btnViewOrig.classList.add("active");
   btnViewApplied.classList.remove("active");
+  btnViewSplit.classList.remove("active");
+  applyZoom();
   renderCanvas();
 });
 
@@ -430,6 +571,17 @@ btnViewApplied.addEventListener("click", () => {
   viewMode = "applied";
   btnViewApplied.classList.add("active");
   btnViewOrig.classList.remove("active");
+  btnViewSplit.classList.remove("active");
+  applyZoom();
+  renderCanvas();
+});
+
+btnViewSplit.addEventListener("click", () => {
+  viewMode = "split";
+  btnViewSplit.classList.add("active");
+  btnViewOrig.classList.remove("active");
+  btnViewApplied.classList.remove("active");
+  applyZoom();
   renderCanvas();
 });
 
@@ -441,15 +593,8 @@ toggleOverlays.addEventListener("change", () => {
 // ---------- canvas rendering ----------
 const MAX_RENDERED_NODES = 8000;
 
-function renderCanvas(): void {
-  if (!doc) return;
-  const activeDoc = viewMode === "applied" && appliedDoc ? appliedDoc : doc;
-  canvas.textContent = "";
-
+function renderNodeList(container: HTMLElement, nodes: CaptureNode[], isOrig: boolean): void {
   const frag = document.createDocumentFragment();
-  const nodes = activeDoc.nodes.slice(0, MAX_RENDERED_NODES);
-
-  // Map suggestions to target nodes for overlay rendering
   const touchMap = new Set<string>();
   const contrastMap = new Map<string, Suggestion>();
   for (const s of suggestions) {
@@ -505,7 +650,7 @@ function renderCanvas(): void {
     }
 
     // Render in-canvas audit overlays
-    if (showOverlays && viewMode === "orig") {
+    if (showOverlays && isOrig) {
       if (touchMap.has(n.id) && (n.w < 24 || n.h < 24)) {
         const overlay = document.createElement("div");
         overlay.className = "touch-target-overlay";
@@ -529,7 +674,7 @@ function renderCanvas(): void {
 
     el.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      for (const hot of canvas.querySelectorAll(".hot")) hot.classList.remove("hot");
+      for (const hot of stage.querySelectorAll(".hot")) hot.classList.remove("hot");
       el.classList.add("hot");
       renderInspector(n);
     });
@@ -537,7 +682,69 @@ function renderCanvas(): void {
     frag.appendChild(el);
   }
 
-  canvas.appendChild(frag);
+  container.appendChild(frag);
+}
+
+function renderCanvas(): void {
+  if (!doc) return;
+  canvas.textContent = "";
+
+  if (viewMode === "split") {
+    wrap.className = "canvas-wrapper is-split";
+    wrap.style.width = "max-content";
+    wrap.style.height = "auto";
+    canvas.style.width = "max-content";
+    canvas.style.height = "auto";
+    canvas.style.background = "transparent";
+
+    const effectiveApplied = appliedDoc ?? applyFixesToDoc(doc, suggestions.flatMap((s) => s.fixes));
+
+    // Left pane: Original
+    const frameOrig = document.createElement("div");
+    frameOrig.className = "split-frame";
+    frameOrig.innerHTML = `
+      <div class="split-frame-header">
+        <span class="split-frame-title">Original Baseline</span>
+        <span class="split-badge warn">${suggestions.length} Findings</span>
+      </div>
+    `;
+    const bodyOrig = document.createElement("div");
+    bodyOrig.className = "split-frame-body";
+    bodyOrig.style.width = doc.docWidth + "px";
+    bodyOrig.style.height = doc.docHeight + "px";
+    bodyOrig.style.background = doc.rootBg ? cssColor(doc.rootBg) : "#07080a";
+    renderNodeList(bodyOrig, doc.nodes.slice(0, MAX_RENDERED_NODES), true);
+    frameOrig.appendChild(bodyOrig);
+
+    // Right pane: Applied
+    const frameApplied = document.createElement("div");
+    frameApplied.className = "split-frame";
+    frameApplied.innerHTML = `
+      <div class="split-frame-header">
+        <span class="split-frame-title">Audit Fixes Applied</span>
+        <span class="split-badge success">WCAG Compliant</span>
+      </div>
+    `;
+    const bodyApplied = document.createElement("div");
+    bodyApplied.className = "split-frame-body";
+    bodyApplied.style.width = effectiveApplied.docWidth + "px";
+    bodyApplied.style.height = effectiveApplied.docHeight + "px";
+    bodyApplied.style.background = effectiveApplied.rootBg ? cssColor(effectiveApplied.rootBg) : "#07080a";
+    renderNodeList(bodyApplied, effectiveApplied.nodes.slice(0, MAX_RENDERED_NODES), false);
+    frameApplied.appendChild(bodyApplied);
+
+    canvas.appendChild(frameOrig);
+    canvas.appendChild(frameApplied);
+  } else {
+    wrap.className = "canvas-wrapper";
+    wrap.style.width = doc.docWidth + "px";
+    wrap.style.height = doc.docHeight + "px";
+    const activeDoc = viewMode === "applied" && appliedDoc ? appliedDoc : doc;
+    canvas.style.width = activeDoc.docWidth + "px";
+    canvas.style.height = activeDoc.docHeight + "px";
+    canvas.style.background = activeDoc.rootBg ? cssColor(activeDoc.rootBg) : "#07080a";
+    renderNodeList(canvas, activeDoc.nodes.slice(0, MAX_RENDERED_NODES), viewMode === "orig");
+  }
 }
 
 window.addEventListener("resize", () => {
@@ -546,10 +753,36 @@ window.addEventListener("resize", () => {
 
 // ---------- node inspector ----------
 function renderInspector(n: CaptureNode): void {
+  selectedNode = n;
   nodeInspector.hidden = false;
+  nodeInspector.style.display = "block";
   inspTag.textContent = `<${n.tag.toLowerCase()}>`;
   inspId.textContent = n.id;
   inspCoords.textContent = `${Math.round(n.w)}×${Math.round(n.h)}px @ (${Math.round(n.x)}, ${Math.round(n.y)})`;
+
+  // Contrast checking
+  if (n.textColor && n.effectiveBg) {
+    const cr = getContrastRatio(n.textColor, n.effectiveBg);
+    inspContrast.hidden = false;
+    inspContrast.style.display = "flex";
+    const passAA = cr >= 4.5;
+    const passAALarge = cr >= 3.0;
+    const passAAA = cr >= 7.0;
+    inspContrast.innerHTML = `
+      <div class="contrast-header-row">
+        <span class="contrast-label">WCAG Contrast</span>
+        <span class="contrast-ratio-num" style="color:${passAA ? 'var(--color-success)' : 'var(--color-error)'}">${cr.toFixed(2)}:1</span>
+      </div>
+      <div class="contrast-pills-row">
+        <span class="contrast-pill ${passAA ? 'pass' : 'fail'}">AA Normal ${passAA ? 'PASS' : 'FAIL'}</span>
+        <span class="contrast-pill ${passAALarge ? 'pass' : 'fail'}">AA Large ${passAALarge ? 'PASS' : 'FAIL'}</span>
+        <span class="contrast-pill ${passAAA ? 'pass' : 'fail'}">AAA ${passAAA ? 'PASS' : 'FAIL'}</span>
+      </div>
+    `;
+  } else {
+    inspContrast.hidden = true;
+    inspContrast.style.display = "none";
+  }
 
   inspStyles.innerHTML = "";
   if (n.textColor) {
@@ -561,11 +794,14 @@ function renderInspector(n: CaptureNode): void {
   if (n.fontSize) {
     inspStyles.innerHTML += `<div>Font: ${n.fontSize}px (${n.fontWeight ?? 400})</div>`;
   }
+  if (n.radii && n.radii.some((r) => r > 0)) {
+    inspStyles.innerHTML += `<div>Radius: ${n.radii.join(" ")}px</div>`;
+  }
 
   const related = suggestions.filter((s) => s.targetIds.includes(n.id));
   inspIssues.innerHTML = "";
   if (!related.length) {
-    inspIssues.innerHTML = '<div style="color:var(--dim)">No audit findings on this node.</div>';
+    inspIssues.innerHTML = '<div style="color:var(--dim);font-size:11px">No audit findings on this node.</div>';
   } else {
     related.forEach((s) => {
       const card = document.createElement("div");
@@ -574,11 +810,11 @@ function renderInspector(n: CaptureNode): void {
       if (s.fixes.length) {
         const fixBtn = document.createElement("button");
         fixBtn.className = "btn btn-sm insp-fix-btn";
-        fixBtn.textContent = "Select Fix";
+        fixBtn.textContent = "⚡ Apply Fix";
         fixBtn.addEventListener("click", () => {
           checked.add(s.id);
           updateCount();
-          toast(`Selected fix ${s.id} for apply`);
+          applyBtn.click();
         });
         card.appendChild(fixBtn);
       }
@@ -589,6 +825,19 @@ function renderInspector(n: CaptureNode): void {
 
 closeInsp.addEventListener("click", () => {
   nodeInspector.hidden = true;
+  nodeInspector.style.display = "none";
+});
+
+copyNodeCssBtn.addEventListener("click", () => {
+  if (!selectedNode) return;
+  const css = generateNodeCss(selectedNode);
+  copyToClipboard(css, `Copied CSS for <${selectedNode.tag.toLowerCase()}> #${selectedNode.id}!`);
+});
+
+copyNodeTwBtn.addEventListener("click", () => {
+  if (!selectedNode) return;
+  const tw = generateNodeTailwind(selectedNode);
+  copyToClipboard(tw, `Copied Tailwind utility classes!`);
 });
 
 // ---------- suggestions list & filtering ----------
@@ -697,13 +946,6 @@ filterChips.forEach((btn) => {
   });
 });
 
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    if (!tokensModal.hidden) closeTokens();
-    if (!nodeInspector.hidden) nodeInspector.hidden = true;
-  }
-});
-
 selAll.addEventListener("click", () => {
   for (const s of suggestions) if (s.fixes.length) checked.add(s.id);
   updateCount();
@@ -719,13 +961,11 @@ applyBtn.addEventListener("click", () => {
   const chosen = suggestions.filter((s) => checked.has(s.id));
   const fixes = chosen.flatMap((s) => s.fixes);
   if (!fixes.length) {
-    toast("selected findings carry no automated fixes");
+    toast("Selected findings carry no automated fixes");
     return;
   }
   const ops = fixesToFigmaOps(fixes);
   appliedDoc = applyFixesToDoc(doc, fixes);
-  download(`${doc.slug}.ops.json`, { slug: doc.slug, ops });
-  download(`${doc.slug}.applied.capture.json`, appliedDoc);
   dlOps.href = URL.createObjectURL(
     new Blob([JSON.stringify({ slug: doc.slug, ops }, null, 2)], { type: "application/json" }),
   );
@@ -738,17 +978,34 @@ applyBtn.addEventListener("click", () => {
   useAppliedCb.checked = true;
 
   btnViewApplied.disabled = false;
+  btnViewSplit.disabled = false;
   btnViewApplied.click(); // switch to live applied preview
 
-  toast(`${ops.length} ops applied! Showing live Applied Preview`);
+  toast(`✓ Applied ${fixes.length} fixes! Check Applied Preview or Side-by-Side`);
 });
 
-// Quick action buttons
-reportBtn.addEventListener("click", () => {
+// ---------- export dropdown menu ----------
+exportMenuBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  exportMenu.hidden = !exportMenu.hidden;
+  exportMenu.style.display = exportMenu.hidden ? "none" : "flex";
+});
+
+window.addEventListener("click", (e) => {
+  if (!exportDropdownWrap.contains(e.target as Node)) {
+    exportMenu.hidden = true;
+    exportMenu.style.display = "none";
+  }
+});
+
+copyOpsBtn.addEventListener("click", () => {
   if (!doc) return;
-  const reportHtml = generateHtmlReport(doc, suggestions, auditScore ?? undefined, designTokens ?? undefined);
-  download(`${doc.slug}.report.html`, reportHtml);
-  toast(`Exported HTML audit report for ${doc.slug}!`);
+  const chosen = suggestions.filter((s) => checked.has(s.id));
+  const fixes = (chosen.length ? chosen : suggestions).flatMap((s) => s.fixes);
+  const ops = fixesToFigmaOps(fixes);
+  copyToClipboard(JSON.stringify({ slug: doc.slug, ops }, null, 2), `Copied ${ops.length} Figma Ops JSON!`);
+  exportMenu.hidden = true;
+  exportMenu.style.display = "none";
 });
 
 copyCssBtn.addEventListener("click", () => {
@@ -761,14 +1018,179 @@ copyCssBtn.addEventListener("click", () => {
   }
   const css = generateCssPatch(doc, fixes);
   copyToClipboard(css, `Copied ${fixes.length} CSS fix declarations!`);
+  exportMenu.hidden = true;
+  exportMenu.style.display = "none";
 });
 
-copyOpsBtn.addEventListener("click", () => {
+downloadDtcgBtn.addEventListener("click", () => {
+  if (!designTokens || !doc) return;
+  const dtcg = tokensToDtcg(designTokens);
+  download(`${doc.slug}.tokens.json`, dtcg);
+  toast(`Exported W3C DTCG tokens for ${doc.slug}!`);
+  exportMenu.hidden = true;
+  exportMenu.style.display = "none";
+});
+
+downloadTokenCssBtn.addEventListener("click", () => {
+  if (!designTokens || !doc) return;
+  const css = tokensToCss(designTokens);
+  download(`${doc.slug}.tokens.css`, css);
+  toast(`Exported tokens.css for ${doc.slug}!`);
+  exportMenu.hidden = true;
+  exportMenu.style.display = "none";
+});
+
+downloadReportHtmlBtn.addEventListener("click", () => {
   if (!doc) return;
-  const chosen = suggestions.filter((s) => checked.has(s.id));
-  const fixes = (chosen.length ? chosen : suggestions).flatMap((s) => s.fixes);
-  const ops = fixesToFigmaOps(fixes);
-  copyToClipboard(JSON.stringify({ slug: doc.slug, ops }, null, 2), `Copied ${ops.length} Figma Ops JSON!`);
+  const reportHtml = generateHtmlReport(doc, suggestions, auditScore ?? undefined, designTokens ?? undefined);
+  download(`${doc.slug}.report.html`, reportHtml);
+  toast(`Exported HTML audit report for ${doc.slug}!`);
+  exportMenu.hidden = true;
+  exportMenu.style.display = "none";
+});
+
+downloadAppliedDocBtn.addEventListener("click", () => {
+  if (!doc) return;
+  const target = appliedDoc ?? applyFixesToDoc(doc, suggestions.flatMap((s) => s.fixes));
+  download(`${doc.slug}.applied.capture.json`, target);
+  toast(`Exported applied JSON for ${doc.slug}!`);
+  exportMenu.hidden = true;
+  exportMenu.style.display = "none";
+});
+
+reportBtn.addEventListener("click", () => {
+  if (!doc) return;
+  const reportHtml = generateHtmlReport(doc, suggestions, auditScore ?? undefined, designTokens ?? undefined);
+  download(`${doc.slug}.report.html`, reportHtml);
+  toast(`Exported HTML audit report for ${doc.slug}!`);
+});
+
+// ---------- shortcuts modal ----------
+const openShortcuts = () => {
+  shortcutsModal.hidden = false;
+  shortcutsModal.style.display = "flex";
+};
+const closeShortcuts = () => {
+  shortcutsModal.hidden = true;
+  shortcutsModal.style.display = "none";
+};
+shortcutsBtn.addEventListener("click", openShortcuts);
+closeShortcutsModal.addEventListener("click", closeShortcuts);
+closeShortcutsFooter.addEventListener("click", closeShortcuts);
+shortcutsBackdrop.addEventListener("click", closeShortcuts);
+
+// ---------- spacebar pan & trackpad zoom ----------
+let isSpacePressed = false;
+let isPanning = false;
+let panStartX = 0;
+let panStartY = 0;
+let scrollStartX = 0;
+let scrollStartY = 0;
+
+window.addEventListener("keydown", (e) => {
+  const target = e.target as HTMLElement | null;
+  const isInput = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+  if (e.code === "Space" && !isInput) {
+    if (!isSpacePressed) {
+      isSpacePressed = true;
+      stage.style.cursor = "grab";
+    }
+  }
+});
+
+window.addEventListener("keyup", (e) => {
+  if (e.code === "Space") {
+    isSpacePressed = false;
+    if (!isPanning) stage.style.cursor = "default";
+  }
+});
+
+stage.addEventListener("mousedown", (e) => {
+  if (e.button === 1 || (e.button === 0 && isSpacePressed)) {
+    e.preventDefault();
+    isPanning = true;
+    stage.style.cursor = "grabbing";
+    panStartX = e.clientX;
+    panStartY = e.clientY;
+    scrollStartX = stage.scrollLeft;
+    scrollStartY = stage.scrollTop;
+  }
+});
+
+window.addEventListener("mousemove", (e) => {
+  if (!isPanning) return;
+  e.preventDefault();
+  const dx = e.clientX - panStartX;
+  const dy = e.clientY - panStartY;
+  stage.scrollLeft = scrollStartX - dx;
+  stage.scrollTop = scrollStartY - dy;
+});
+
+window.addEventListener("mouseup", () => {
+  if (isPanning) {
+    isPanning = false;
+    stage.style.cursor = isSpacePressed ? "grab" : "default";
+  }
+});
+
+stage.addEventListener(
+  "wheel",
+  (e) => {
+    if (e.metaKey || e.ctrlKey) {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        zoomFactor = Math.min(3.0, zoomFactor * 1.15);
+      } else {
+        zoomFactor = Math.max(0.15, zoomFactor / 1.15);
+      }
+      applyZoom();
+    }
+  },
+  { passive: false },
+);
+
+// Global keyboard shortcuts
+window.addEventListener("keydown", (e) => {
+  const target = e.target as HTMLElement | null;
+  const isInput = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+
+  if (e.key === "Escape") {
+    if (!tokensModal.hidden) closeTokens();
+    if (!shortcutsModal.hidden) closeShortcuts();
+    if (!nodeInspector.hidden) {
+      nodeInspector.hidden = true;
+      nodeInspector.style.display = "none";
+    }
+    if (!exportMenu.hidden) {
+      exportMenu.hidden = true;
+      exportMenu.style.display = "none";
+    }
+    return;
+  }
+
+  if (isInput) return;
+
+  if (e.key === "?") {
+    if (shortcutsModal.hidden) openShortcuts();
+    else closeShortcuts();
+  } else if (e.key === "1") {
+    btnViewOrig.click();
+  } else if (e.key === "2") {
+    if (!btnViewApplied.disabled) btnViewApplied.click();
+  } else if (e.key === "3") {
+    if (!btnViewSplit.disabled) btnViewSplit.click();
+  } else if (e.key.toLowerCase() === "o") {
+    toggleOverlays.checked = !toggleOverlays.checked;
+    showOverlays = toggleOverlays.checked;
+    renderCanvas();
+  } else if (e.key.toLowerCase() === "t") {
+    tokensBtn.click();
+  } else if (e.key.toLowerCase() === "r") {
+    reportBtn.click();
+  } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+    e.preventDefault();
+    selAll.click();
+  }
 });
 
 // ---------- tokens modal ----------
